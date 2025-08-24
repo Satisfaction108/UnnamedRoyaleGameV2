@@ -1,1 +1,1164 @@
-<!-- first file -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UnnamedRoyaleGameV2</title>
+    <meta name="description" content="Landing screen for UnnamedRoyaleGameV2" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ojuju:wght@200..800&display=swap"   rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=WDXL+Lubrifont+TC&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+      :root {
+        --bg-base: #e9eaec;
+        --grid-line: rgba(0, 0, 0, 0.06);
+
+        --btn-w: 220px;
+        --gap: 24px;
+
+        --btn-text: #ffffff;
+        --shadow: 0 8px 24px rgba(0,0,0,0.12);
+        --shadow-hover: 0 10px 30px rgba(0,0,0,0.18);
+      }
+
+      html, body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: #111;
+        background-color: var(--bg-base);
+        background-image:
+          repeating-linear-gradient(0deg, var(--grid-line) 0, var(--grid-line) 1px, transparent 1px, transparent 36px),
+          repeating-linear-gradient(90deg, var(--grid-line) 0, var(--grid-line) 1px, transparent 1px, transparent 36px);
+        background-attachment: fixed;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px 16px 8px;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 90px;
+        font-weight: 400;
+        color: #D3AF37;
+        letter-spacing: 0.3px;
+        text-align: center;
+        text-shadow: 6px 6px 8px;
+        font-family: "Bebas Neue", sans-serif;
+        font-style: normal;
+        -webkit-text-stroke-width: 0.5px;
+        -webkit-text-stroke-color: black;
+      }
+
+      main {
+        display: grid;
+        place-items: start center;
+        padding: 220px 16px 64px;
+      }
+
+      .panel {
+        display: grid;
+        gap: 18px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: repeat(2, var(--btn-w));
+        gap: var(--gap);
+        justify-content: center;
+      }
+
+      .btn {
+        appearance: none;
+        border: 0;
+        border-radius: 12px;
+        cursor: pointer;
+        background: var(--c, #19ecff);
+        color: var(--btn-text);
+        font-weight: 700;
+        font-size: 30px;
+        padding: 14px 20px;
+        box-shadow: var(--shadow);
+        transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+        text-shadow: 0 1px 0 rgba(0,0,0,0.15);
+        font-family: "WDXL Lubrifont TC", sans-serif;
+        font-optical-sizing: auto;
+
+        font-style: normal;
+      }
+
+      .btn:hover, .btn:focus-visible {
+        outline: none;
+        transform: translateY(-2px);
+        background: var(--c-dark, #18cfe0);
+        box-shadow: var(--shadow-hover);
+      }
+      .btn:active {
+        transform: translateY(0);
+        box-shadow: var(--shadow);
+      }
+
+      .btn--signup { --c: #cc669c; --c-dark: #b25886; }
+      .btn--login  { --c: #e03e41; --c-dark: #b53235; }
+      .btn--guest  { --c: #3ca4cb; --c-dark: #3186a6; }
+
+      .btn--large {
+        width: calc((var(--btn-w) * 2) + var(--gap));
+        justify-self: center;
+        padding: 20px 24px;
+      }
+
+
+      .spacer { height: 6px; }
+
+      .btn:focus-visible { box-shadow: var(--shadow-hover), 0 0 0 3px rgba(255,255,255,0.25), 0 0 0 5px var(--btn-border); }
+      /* tanks layer */
+      header, main { position: relative; z-index: 2; }
+      .bg-tanks { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+      .tank { position: absolute; top: var(--top, 50%); right: -15vw; animation: fly-left var(--dur, 18s) linear forwards; animation-delay: var(--delay, 0s); will-change: transform; }
+      .tank img { width: var(--size, 136px); opacity: 0.55; animation: spin var(--spin, 6s) linear infinite; animation-delay: var(--delay, 0s); transform-origin: center center; display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.08)); }
+      @keyframes fly-left { from { transform: translateX(0); } to { transform: translateX(-120vw); } }
+      @keyframes spin { from { transform: rotate(0turn); } to { transform: rotate(1turn); } }
+    </style>
+      <style>
+        /* clean modal design system */
+        .modal-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.6);
+          display: none;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          backdrop-filter: blur(8px);
+          padding: 20px;
+        }
+
+        .modal-backdrop[aria-hidden="false"] {
+          display: flex;
+          animation: fadeIn 300ms ease-out;
+        }
+
+        .modal {
+          background: #ffffff;
+          border-radius: 16px;
+          width: 100%;
+          max-width: 420px;
+          max-height: 85vh;
+          overflow-y: auto;
+          position: relative;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+          transform: translateY(20px) scale(0.95);
+          opacity: 0;
+          animation: modalSlideIn 400ms ease-out forwards;
+        }
+
+        .modal__header {
+          padding: 24px 24px 16px;
+          text-align: center;
+          border-bottom: 1px solid #f1f5f9;
+        }
+
+        .modal__title {
+          font-size: 24px;
+          font-weight: 700;
+          color: #1e293b;
+          font-family: "Inter", system-ui;
+          margin: 0 0 8px 0;
+          letter-spacing: -0.3px;
+        }
+
+        .modal__subtitle {
+          font-size: 14px;
+          color: #64748b;
+          font-family: "Inter", system-ui;
+          margin: 0;
+          line-height: 1.5;
+        }
+
+        .modal__close {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          width: 32px;
+          height: 32px;
+          border: none;
+          background: #f8fafc;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 200ms ease;
+          color: #64748b;
+        }
+
+        .modal__close:hover {
+          background: #e2e8f0;
+          color: #475569;
+        }
+
+        .modal__body {
+          padding: 24px;
+        }
+
+        /* clean form system */
+        .form-section {
+          margin-bottom: 24px;
+        }
+
+        .form-section__title {
+          font-size: 14px;
+          font-weight: 600;
+          color: #374151;
+          font-family: "Inter", system-ui;
+          margin: 0 0 16px 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .form-section__icon {
+          width: 16px;
+          height: 16px;
+          color: #cc669c;
+        }
+
+        .form-row {
+          margin-bottom: 20px;
+        }
+
+        .form-row:last-child {
+          margin-bottom: 0;
+        }
+
+        .label {
+          display: block;
+          font-weight: 600;
+          font-size: 14px;
+          color: #374151;
+          font-family: "Inter", system-ui;
+          margin-bottom: 8px;
+        }
+
+        .label__required {
+          color: #dc2626;
+          margin-left: 2px;
+        }
+
+        .input-group {
+          position: relative;
+        }
+
+        .input {
+          width: 100%;
+          padding: 12px 16px;
+          font-size: 14px;
+          font-family: "Inter", system-ui;
+          background: #ffffff;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          transition: all 200ms ease;
+          outline: none;
+          color: #1f2937;
+          box-sizing: border-box;
+        }
+
+        .input:focus {
+          border-color: #cc669c;
+          box-shadow: 0 0 0 3px rgba(204, 102, 156, 0.1);
+        }
+
+        .input::placeholder {
+          color: #9ca3af;
+        }
+
+        .input:hover:not(:focus) {
+          border-color: #9ca3af;
+        }
+
+        .input-icon {
+          position: absolute;
+          left: 16px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #6b7280;
+          pointer-events: none;
+        }
+
+        .input-group:focus-within .input-icon {
+          color: #cc669c;
+        }
+
+        .input--with-icon {
+          padding-left: 48px;
+        }
+
+        .input--with-toggle {
+          padding-right: 60px;
+        }
+
+        .input-toggle {
+          position: absolute;
+          right: 16px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: #f9fafb;
+          border: 1px solid #d1d5db;
+          color: #6b7280;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          padding: 4px 8px;
+          border-radius: 6px;
+          transition: all 200ms ease;
+          font-family: "Inter", system-ui;
+        }
+
+        .input-toggle:hover {
+          background: #f3f4f6;
+          color: #374151;
+        }
+
+        /* clean button system */
+        .form-actions {
+          display: flex;
+          gap: 12px;
+          margin-top: 24px;
+          padding-top: 20px;
+          border-top: 1px solid #f1f5f9;
+        }
+
+        .btn-modern {
+          flex: 1;
+          padding: 12px 20px;
+          font-size: 14px;
+          font-weight: 600;
+          font-family: "Inter", system-ui;
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 200ms ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          min-height: 44px;
+        }
+
+        .btn-modern--primary {
+          background: #cc669c;
+          color: #ffffff;
+          box-shadow: 0 2px 8px rgba(204, 102, 156, 0.2);
+        }
+
+        .btn-modern--primary:hover {
+          background: #b25886;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(204, 102, 156, 0.3);
+        }
+
+        .btn-modern--primary:active {
+          transform: translateY(0);
+        }
+
+        .btn-modern--secondary {
+          background: #f8fafc;
+          color: #64748b;
+          border: 1px solid #e2e8f0;
+        }
+
+        .btn-modern--secondary:hover {
+          background: #f1f5f9;
+          color: #475569;
+        }
+
+        /* clean feedback system */
+        .feedback-message {
+          padding: 12px 16px;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 500;
+          font-family: "Inter", system-ui;
+          margin-top: 16px;
+          min-height: 20px;
+          display: none;
+        }
+
+        .feedback-message.error {
+          background: #fef2f2;
+          color: #dc2626;
+          border: 1px solid #fecaca;
+          display: block;
+        }
+
+        .feedback-message.success {
+          background: #f0fdf4;
+          color: #16a34a;
+          border: 1px solid #bbf7d0;
+          display: block;
+        }
+
+        /* clean animations */
+        @keyframes modalSlideIn {
+          from {
+            transform: translateY(20px) scale(0.95);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+          }
+        }
+
+        /* notification modal system */
+        .notification-modal {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 10000;
+          background: #ffffff;
+          border-radius: 12px;
+          padding: 16px 20px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+          font-family: "Inter", system-ui;
+          font-size: 14px;
+          font-weight: 600;
+          min-width: 280px;
+          max-width: 400px;
+          transform: translateX(100%);
+          opacity: 0;
+          transition: all 300ms ease;
+          border-left: 4px solid;
+        }
+
+        .notification-modal.show {
+          transform: translateX(0);
+          opacity: 1;
+        }
+
+        .notification-modal.error {
+          border-left-color: #dc2626;
+          color: #dc2626;
+          background: #fef2f2;
+        }
+
+        .notification-modal.success {
+          border-left-color: #16a34a;
+          color: #16a34a;
+          background: #f0fdf4;
+        }
+
+        /* login modal styles */
+        .btn-modern--login {
+          background: #e03e41;
+          color: #ffffff;
+          box-shadow: 0 2px 8px rgba(224, 62, 65, 0.2);
+        }
+
+        .btn-modern--login:hover {
+          background: #b53235;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(224, 62, 65, 0.3);
+        }
+
+        .btn-modern--login:active {
+          transform: translateY(0);
+        }
+
+        /* checkbox styles */
+        .checkbox-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          font-size: 14px;
+          color: #475569;
+          font-family: "Inter", system-ui;
+        }
+
+        .checkbox-input {
+          position: absolute;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .checkbox-custom {
+          width: 16px;
+          height: 16px;
+          border: 2px solid #d1d5db;
+          border-radius: 4px;
+          background: #ffffff;
+          transition: all 200ms ease;
+          position: relative;
+          flex-shrink: 0;
+        }
+
+        .checkbox-input:checked + .checkbox-custom {
+          background: #e03e41;
+          border-color: #e03e41;
+        }
+
+        .checkbox-input:checked + .checkbox-custom::after {
+          content: '';
+          position: absolute;
+          top: 1px;
+          left: 4px;
+          width: 4px;
+          height: 8px;
+          border: 2px solid #ffffff;
+          border-top: 0;
+          border-left: 0;
+          transform: rotate(45deg);
+        }
+
+        .checkbox-wrapper:hover .checkbox-custom {
+          border-color: #e03e41;
+        }
+
+        .checkbox-label {
+          user-select: none;
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        /* responsive design */
+        @media (max-width: 480px) {
+          .modal {
+            max-width: calc(100% - 32px);
+            margin: 16px;
+          }
+
+          .modal__header {
+            padding: 20px 20px 16px;
+          }
+
+          .modal__body {
+            padding: 20px;
+          }
+
+          .modal__title {
+            font-size: 20px;
+          }
+
+          .form-actions {
+            flex-direction: column;
+            gap: 8px;
+          }
+        }
+      </style>
+
+  </head>
+  <body>
+    <div class="bg-tanks" id="bg-tanks" aria-hidden="true"></div>
+    <header>
+      <h1>UnnamedRoyaleGameV2</h1>
+    </header>
+    <main>
+      <section class="panel" aria-label="Entry options">
+        <div class="row" role="group" aria-label="Auth actions">
+          <button id="btn-signup" class="btn btn--signup" type="button">Sign Up</button>
+          <button id="btn-login" class="btn btn--login" type="button">Log In</button>
+        </div>
+        <div class="spacer"></div>
+        <button id="btn-guest" class="btn btn--large btn--guest" type="button">Guest</button>
+      </section>
+    <div class="modal-backdrop" id="signup-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="signup-title" aria-describedby="signup-desc">
+      <div class="modal" role="document">
+        <button id="signup-close" class="modal__close" type="button" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+
+        <div class="modal__header">
+          <h2 class="modal__title" id="signup-title">Create Account</h2>
+          <p class="modal__subtitle" id="signup-desc">Sign up to UnnamedRoyaleGameV2</p>
+        </div>
+
+        <div class="modal__body">
+          <form id="signup-form" novalidate>
+            <div class="form-section">
+              <div class="form-section__title">
+                <svg class="form-section__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
+                  <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                </svg>
+                Account Details
+              </div>
+
+              <div class="form-row">
+                <label class="label" for="su-username">
+                  Username <span class="label__required">*</span>
+                </label>
+                <div class="input-group">
+                  <span class="input-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
+                      <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </span>
+                  <input
+                    id="su-username"
+                    class="input input--with-icon"
+                    name="username"
+                    type="text"
+                    placeholder="Choose your username"
+                    minlength="3"
+                    maxlength="20"
+                    autocomplete="username"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <label class="label" for="su-password">
+                  Password <span class="label__required">*</span>
+                </label>
+                <div class="input-group">
+                  <span class="input-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </span>
+                  <input
+                    id="su-password"
+                    class="input input--with-icon input--with-toggle"
+                    name="password"
+                    type="password"
+                    placeholder="Create a secure password"
+                    minlength="6"
+                    autocomplete="new-password"
+                    required
+                  />
+                  <button id="toggle-p1" class="input-toggle" type="button" aria-label="Show password">Show</button>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <label class="label" for="su-password2">
+                  Confirm Password <span class="label__required">*</span>
+                </label>
+                <div class="input-group">
+                  <span class="input-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </span>
+                  <input
+                    id="su-password2"
+                    class="input input--with-icon input--with-toggle"
+                    name="password2"
+                    type="password"
+                    placeholder="Confirm your password"
+                    minlength="6"
+                    autocomplete="new-password"
+                    required
+                  />
+                  <button id="toggle-p2" class="input-toggle" type="button" aria-label="Show password">Show</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="signup-msg" class="feedback-message" aria-live="polite"></div>
+
+            <div class="form-actions">
+              <button type="button" id="signup-cancel" class="btn-modern btn-modern--secondary">
+                Cancel
+              </button>
+              <button type="submit" class="btn-modern btn-modern--primary">
+                Create Account
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- login modal -->
+    <div class="modal-backdrop" id="login-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="login-title" aria-describedby="login-desc">
+      <div class="modal" role="document">
+        <button id="login-close" class="modal__close" type="button" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+
+        <div class="modal__header">
+          <h2 class="modal__title" id="login-title">Welcome Back</h2>
+          <p class="modal__subtitle" id="login-desc">Sign in to continue your journey</p>
+        </div>
+
+        <div class="modal__body">
+          <form id="login-form" novalidate>
+            <div class="form-section">
+              <div class="form-section__title">
+                <svg class="form-section__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
+                  <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                </svg>
+                Account Details
+              </div>
+
+              <div class="form-row">
+                <label class="label" for="li-username">
+                  Username <span class="label__required">*</span>
+                </label>
+                <div class="input-group">
+                  <span class="input-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
+                      <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </span>
+                  <input
+                    id="li-username"
+                    class="input input--with-icon"
+                    name="username"
+                    type="text"
+                    placeholder="Enter your username"
+                    autocomplete="username"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <label class="label" for="li-password">
+                  Password <span class="label__required">*</span>
+                </label>
+                <div class="input-group">
+                  <span class="input-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </span>
+                  <input
+                    id="li-password"
+                    class="input input--with-icon input--with-toggle"
+                    name="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    autocomplete="current-password"
+                    required
+                  />
+                  <button id="toggle-li-p" class="input-toggle" type="button" aria-label="Show password">Show</button>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <label class="checkbox-wrapper">
+                  <input id="li-remember" name="remember" type="checkbox" class="checkbox-input">
+                  <span class="checkbox-custom"></span>
+                  <span class="checkbox-label">Remember me on this device</span>
+                </label>
+              </div>
+            </div>
+
+            <div id="login-msg" class="feedback-message" aria-live="polite"></div>
+
+            <div class="form-actions">
+              <button type="button" id="login-cancel" class="btn-modern btn-modern--secondary">
+                Cancel
+              </button>
+              <button type="submit" class="btn-modern btn-modern--login">
+                Sign In
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    </main>
+    <script>
+      // tank list
+      const TANK_IMAGES = [
+        'BGTanks/Tank_Annihilator.png',
+        'BGTanks/Tank_Auto-5.png',
+        'BGTanks/Tank_Battleship.png',
+        'BGTanks/Tank_Factory.png',
+        'BGTanks/Tank_Necromancer.png',
+        'BGTanks/Tank_Overlord.png',
+        'BGTanks/Tank_Pentashot.png',
+        'BGTanks/Tank_Streamliner.png'
+      ];
+
+      // rnd util
+      const rnd = (min, max) => Math.random() * (max - min) + min;
+
+      // constants
+      const SPAWN_INTERVAL = 2000; // ms
+      const FLIGHT_DURATION = 18000; // ms
+      let lastTankIndex = -1; // last idx
+
+      // tank spawn
+      const layer = document.getElementById('bg-tanks');
+      function spawnTank(elapsedSecFromSchedule = 0) {
+        if (!layer) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'tank';
+
+        const img = document.createElement('img');
+
+        // pick index
+        let idx = (Math.random() * TANK_IMAGES.length) | 0;
+        if (TANK_IMAGES.length > 1 && idx === lastTankIndex) {
+          idx = (idx + 1 + ((Math.random() * (TANK_IMAGES.length - 1)) | 0)) % TANK_IMAGES.length;
+        }
+        lastTankIndex = idx;
+        img.src = TANK_IMAGES[idx];
+        img.alt = '';
+        img.setAttribute('aria-hidden', 'true');
+        img.setAttribute('draggable', 'false');
+        img.decoding = 'async';
+
+        // position props
+        const top = rnd(8, 88).toFixed(2) + '%';
+        const spin = rnd(3, 8).toFixed(2) + 's';
+        const delay = (-Math.min(elapsedSecFromSchedule, FLIGHT_DURATION / 1000)).toFixed(2) + 's';
+        wrap.style.setProperty('--top', top);
+        wrap.style.setProperty('--delay', delay);
+        img.style.setProperty('--spin', spin);
+
+        wrap.appendChild(img);
+        layer.appendChild(wrap);
+
+        // on end
+        wrap.addEventListener('animationend', () => {
+          wrap.remove();
+        }, { once: true });
+      }
+
+      // scheduler
+      let nextSpawn = performance.now();
+      function loop() {
+        const now = performance.now();
+        while (now >= nextSpawn) {
+          const elapsedSec = (now - nextSpawn) / 1000;
+          spawnTank(elapsedSec);
+          nextSpawn += SPAWN_INTERVAL;
+        }
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+
+      // notification system
+      function showNotification(message, type = 'error') {
+        // remove existing notification
+        const existing = document.querySelector('.notification-modal');
+        if (existing) existing.remove();
+
+        // create notification
+        const notification = document.createElement('div');
+        notification.className = `notification-modal ${type}`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        // show notification
+        setTimeout(() => notification.classList.add('show'), 10);
+
+        // auto hide after 3 seconds
+        setTimeout(() => {
+          notification.classList.remove('show');
+          setTimeout(() => notification.remove(), 300);
+        }, 3000);
+      }
+
+      // signup modal
+      const $ = (sel) => document.querySelector(sel);
+      const modal = $('#signup-modal');
+      const openBtn = $('#btn-signup');
+      const closeBtn = $('#signup-close');
+      const cancelBtn = $('#signup-cancel');
+      const form = $('#signup-form');
+      const msg = $('#signup-msg');
+      const u = $('#su-username');
+      const p1 = $('#su-password');
+      const p2 = $('#su-password2');
+
+	      // toggle pw
+	      const t1 = document.getElementById('toggle-p1');
+	      const t2 = document.getElementById('toggle-p2');
+	      function setupToggle(btn, input) {
+	        if (!btn || !input) return;
+	        btn.addEventListener('click', () => {
+	          const show = input.type === 'password';
+	          input.type = show ? 'text' : 'password';
+	          btn.textContent = show ? 'Hide' : 'Show';
+	          btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+	        });
+	      }
+	      setupToggle(t1, p1);
+	      setupToggle(t2, p2);
+
+
+      function openModal() { modal.setAttribute('aria-hidden', 'false'); u.focus(); }
+      function closeModal() { modal.setAttribute('aria-hidden', 'true'); form.reset(); msg.textContent = ''; msg.className = ''; }
+
+      openBtn?.addEventListener('click', openModal);
+      closeBtn?.addEventListener('click', closeModal);
+      cancelBtn?.addEventListener('click', closeModal);
+      modal?.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+      // login modal
+      const loginModal = $('#login-modal');
+      const loginOpenBtn = $('#btn-login');
+      const loginCloseBtn = $('#login-close');
+      const loginCancelBtn = $('#login-cancel');
+      const loginForm = $('#login-form');
+      const loginMsg = $('#login-msg');
+      const loginU = $('#li-username');
+      const loginP = $('#li-password');
+      const loginRemember = $('#li-remember');
+
+	      // guest ui
+	      const guestBtn = document.getElementById('btn-guest');
+	      function setGuestUI(name) {
+	        if (guestBtn) {
+	          guestBtn.textContent = 'Continue as Guest';
+	          guestBtn.setAttribute('aria-label', `Continue as ${name}`);
+	        }
+	      }
+	      async function createOrEnsureGuest(preferred) {
+	        const res = await fetch('/api/guest', {
+	          method: 'POST',
+	          headers: { 'Content-Type': 'application/json' },
+	          body: JSON.stringify(preferred ? { username: preferred } : {})
+	        });
+	        const data = await res.json().catch(() => ({}));
+	        if (!res.ok || !data.ok || !data.username) throw new Error(data.error || 'Guest failed');
+	        return data.username;
+	      }
+	      async function handleGuestClick() {
+	        try {
+	          guestBtn.disabled = true;
+	          const saved = localStorage.getItem('guestUser');
+	          let guestName = '';
+	          if (saved) {
+	            try {
+	              const obj = JSON.parse(saved);
+	              if (obj && obj.username) guestName = await createOrEnsureGuest(obj.username);
+	            } catch {}
+	          }
+	          if (!guestName) guestName = await createOrEnsureGuest();
+	          localStorage.setItem('guestUser', JSON.stringify({ username: guestName, loginTime: Date.now() }));
+	          setGuestUI(guestName);
+	          showNotification(`Logged in as ${guestName}`, 'success');
+	        } catch (err) {
+	          showNotification(err.message || 'Guest failed', 'error');
+	        } finally {
+	          guestBtn.disabled = false;
+	        }
+	      }
+	      guestBtn?.addEventListener('click', handleGuestClick);
+
+
+      // login password toggle
+      const loginToggle = document.getElementById('toggle-li-p');
+      setupToggle(loginToggle, loginP);
+
+      function openLoginModal() {
+        loginModal.setAttribute('aria-hidden', 'false');
+        loginU.focus();
+      }
+
+      function closeLoginModal() {
+        loginModal.setAttribute('aria-hidden', 'true');
+        loginForm.reset();
+        loginMsg.textContent = '';
+        loginMsg.className = 'feedback-message';
+      }
+
+      loginOpenBtn?.addEventListener('click', openLoginModal);
+      loginCloseBtn?.addEventListener('click', closeLoginModal);
+      loginCancelBtn?.addEventListener('click', closeLoginModal);
+      loginModal?.addEventListener('click', (e) => { if (e.target === loginModal) closeLoginModal(); });
+
+      // global escape key handler
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (modal.getAttribute('aria-hidden') === 'false') closeModal();
+          if (loginModal.getAttribute('aria-hidden') === 'false') closeLoginModal();
+        }
+      });
+
+      async function usernameExists(name) {
+        const r = await fetch(`/api/check-username?u=${encodeURIComponent(name)}`);
+        if (!r.ok) return false;
+        const j = await r.json().catch(() => ({}));
+        return !!j.exists;
+      }
+
+      // form submit
+      form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        msg.textContent = '';
+        msg.className = '';
+
+        const username = (u.value || '').trim();
+        const password = p1.value || '';
+        const password2 = p2.value || '';
+
+        // client validate
+        const userRe = /^[A-Za-z0-9_-]{3,20}$/;
+        if (!userRe.test(username)) {
+          showNotification('Username must be 3–20 letters, numbers, _ or -', 'error');
+          return;
+        }
+        if (password.length < 6) {
+          showNotification('Password must be at least 6 characters', 'error');
+          return;
+        }
+        if (password !== password2) {
+          showNotification('Passwords do not match', 'error');
+          return;
+        }
+        if (await usernameExists(username)) {
+          showNotification('Username is taken!', 'error');
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || 'Sign Up failed');
+          showNotification('Account created!', 'success');
+          setTimeout(() => closeModal(), 800);
+        } catch (err) {
+          showNotification(err.message || 'Sign Up failed', 'error');
+        }
+      });
+
+      // login form submit
+      loginForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        loginMsg.textContent = '';
+        loginMsg.className = 'feedback-message';
+
+        const username = (loginU.value || '').trim();
+        const password = loginP.value || '';
+        const remember = loginRemember.checked;
+
+        // client validate
+        const userRe = /^[A-Za-z0-9_-]{3,20}$/;
+        if (!userRe.test(username)) {
+          showNotification('Please enter a valid username', 'error');
+          return;
+        }
+        if (password.length < 6) {
+          showNotification('Password must be at least 6 characters', 'error');
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || 'Login failed');
+
+	      // guest auto
+	      async function checkGuestUser() {
+	        try {
+	          const saved = localStorage.getItem('guestUser');
+	          if (!saved) return;
+	          const obj = JSON.parse(saved);
+	          if (!obj || !obj.username) return;
+	          // ensure exists
+	          const name = await createOrEnsureGuest(obj.username);
+	          setGuestUI(name);
+	          showNotification(`Welcome back, ${name}!`, 'success');
+	        } catch (err) {
+	          // remove corrupted
+	          localStorage.removeItem('guestUser');
+	        }
+	      }
+
+
+          // save to localStorage if remember is checked
+          if (remember) {
+            localStorage.setItem('rememberedUser', JSON.stringify({
+              username: username,
+              loginTime: Date.now()
+            }));
+          }
+
+          showNotification('Logged in successfully!', 'success');
+          setTimeout(() => closeLoginModal(), 800);
+
+          // todo: handle post-login functionality
+        } catch (err) {
+          showNotification(err.message || 'Login failed', 'error');
+        }
+      });
+
+      // check for remembered user on page load
+      function checkRememberedUser() {
+        try {
+          const remembered = localStorage.getItem('rememberedUser');
+          if (remembered) {
+            const userData = JSON.parse(remembered);
+            const daysSinceLogin = (Date.now() - userData.loginTime) / (1000 * 60 * 60 * 24);
+
+            // auto-login if less than 30 days
+            if (daysSinceLogin < 30) {
+              loginU.value = userData.username;
+              loginRemember.checked = true;
+              showNotification(`Welcome back, ${userData.username}!`, 'success');
+            } else {
+              // remove expired data
+              localStorage.removeItem('rememberedUser');
+            }
+          }
+        } catch (err) {
+          // remove corrupted data
+          localStorage.removeItem('rememberedUser');
+        }
+      }
+
+      // check for remembered user when page loads
+      checkRememberedUser();
+
+	      // guest check
+	      checkGuestUser();
+    </script>
+  </body>
+</html>
