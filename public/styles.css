@@ -29,10 +29,11 @@ body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Segoe UI", Arial;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
     overflow: hidden;
 }
 
+/* animated grid */
 #bgGrid {
     position: fixed;
     inset: 0;
@@ -124,12 +125,12 @@ body {
 
 .btnPrimary {
     background: linear-gradient(135deg, var(--accentA), #5cc6ff);
-    color: white;
+    color: white
 }
 
 .btnSecondary {
     background: linear-gradient(135deg, var(--accentC), #ff8a5c);
-    color: white;
+    color: white
 }
 
     .btnPrimary:hover, .btnSecondary:hover, .btnBattle:hover {
@@ -146,9 +147,10 @@ body {
     color: var(--muted);
     font-size: 14px;
     letter-spacing: .4px;
-    opacity: .9;
+    opacity: .9
 }
 
+/* overlay */
 #overlay {
     position: fixed;
     inset: 0;
@@ -164,11 +166,12 @@ body {
         pointer-events: auto
     }
 
+/* modals */
 dialog {
     width: min(520px, 92vw);
     border: none;
     padding: 0;
-    background: transparent;
+    background: transparent
 }
 
     dialog[open] {
@@ -201,18 +204,18 @@ dialog {
 h2#loginTitle, h2#signupTitle {
     margin: 0 0 14px 0;
     font-size: 24px;
-    letter-spacing: .3px;
+    letter-spacing: .3px
 }
 
 .fieldRow {
     display: grid;
     gap: 8px;
-    margin: 12px 0;
+    margin: 12px 0
 }
 
     .fieldRow label {
         font-size: 13px;
-        color: var(--muted);
+        color: var(--muted)
     }
 
     .fieldRow input {
@@ -223,30 +226,50 @@ h2#loginTitle, h2#signupTitle {
         color: var(--text);
         padding: 0 14px;
         outline: none;
-        transition: border var(--speed), box-shadow var(--speed);
+        transition: border var(--speed), box-shadow var(--speed)
     }
 
         .fieldRow input:focus {
             border: 1px solid #6aa8ff;
-            box-shadow: 0 0 0 6px rgba(85,140,255,0.15);
+            box-shadow: 0 0 0 6px rgba(85,140,255,0.15)
         }
+
+.rememberRow {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 2px;
+    user-select: none
+}
+
+    .rememberRow input {
+        width: 18px;
+        height: 18px;
+        accent-color: #6aa8ff;
+        cursor: pointer
+    }
+
+    .rememberRow label {
+        cursor: pointer;
+        color: var(--muted)
+    }
 
 .modalActions {
     display: flex;
     gap: 12px;
     justify-content: flex-end;
-    margin-top: 6px;
+    margin-top: 6px
 }
 
 .btnTertiary {
     background: linear-gradient(135deg, #2e3a5a, #3d4f7b);
-    color: #e7efff;
+    color: #e7efff
 }
 
 .btnGhost {
     background: transparent;
     color: var(--muted);
-    border: 1px solid rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.16)
 }
 
     .btnGhost:hover {
@@ -258,15 +281,16 @@ h2#loginTitle, h2#signupTitle {
     min-height: 20px;
     color: #ff8a8a;
     font-size: 13px;
-    margin-top: 8px;
+    margin-top: 8px
 }
 
+/* main menu */
 #mainMenu {
     position: fixed;
     inset: 0;
     display: none;
     opacity: 0;
-    transition: opacity var(--speed);
+    transition: opacity var(--speed)
 }
 
     #mainMenu[data-show="true"] {
@@ -283,7 +307,7 @@ h2#loginTitle, h2#signupTitle {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    padding: 0 22px;
+    padding: 0 22px
 }
 
 #brandMini {
@@ -297,7 +321,7 @@ h2#loginTitle, h2#signupTitle {
     color: #cfe0ff;
     border-radius: 10px;
     box-shadow: var(--shadow);
-    font-weight: 800;
+    font-weight: 800
 }
 
 .btnBattle {
@@ -307,7 +331,7 @@ h2#loginTitle, h2#signupTitle {
     border-radius: 999px;
     background: radial-gradient(120% 160% at 0% 0%, var(--green), #2ff0ff 40%, #4b79ff 80%);
     color: #071018;
-    text-shadow: 0 2px 16px rgba(255,255,255,0.5);
+    text-shadow: 0 2px 16px rgba(255,255,255,0.5)
 }
 
 #userBadge {
@@ -321,7 +345,7 @@ h2#loginTitle, h2#signupTitle {
     background: linear-gradient(135deg, #1a2233, #151b28);
     border: 1px solid rgba(255,255,255,0.08);
     color: #cfe0ff;
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow)
 }
 
 #mainContent {
@@ -332,8 +356,9 @@ h2#loginTitle, h2#signupTitle {
     gap: 22px;
 }
 
+/* account card */
 #accountPanel {
-    align-self: start;
+    align-self: start
 }
 
 #accountCard {
@@ -341,20 +366,20 @@ h2#loginTitle, h2#signupTitle {
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    padding: 18px;
+    padding: 18px
 }
 
 #accountTitle {
     font-weight: 800;
     letter-spacing: .3px;
-    margin-bottom: 10px;
+    margin-bottom: 10px
 }
 
 #accountRow {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 12px
 }
 
 #accountLabel {
@@ -381,42 +406,27 @@ h2#loginTitle, h2#signupTitle {
         justify-content: space-between;
         background: rgba(255,255,255,0.04);
         padding: 10px 12px;
-        border-radius: 10px;
+        border-radius: 10px
     }
 
+/* TANK PICKER — centered, arrows docked to the sides of the card */
 #selectorWrap {
+    grid-column: 2 / 3;
+    align-self: center;
+    justify-self: center;
+    width: 100%;
     display: grid;
-    grid-template-columns: 80px 1fr 80px;
-    align-items: center;
-    justify-items: center;
+    place-items: center;
 }
-
-.navArrow {
-    width: 64px;
-    height: 64px;
-    border-radius: 16px;
-    border: 0;
-    background: linear-gradient(135deg, #2a3348, #1f2636);
-    color: #e1eaff;
-    font-size: 36px;
-    font-weight: 900;
-    cursor: pointer;
-    transition: transform var(--speed), background var(--speed);
-    box-shadow: var(--shadow);
-}
-
-    .navArrow:hover {
-        transform: translateY(-2px)
-    }
 
 #tankCard {
-    width: min(780px, 60vw);
+    position: relative;
+    width: min(900px, 70vw);
     aspect-ratio: 2.2 / 1;
     border-radius: calc(var(--radius) + 8px);
     background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
     border: 1px solid rgba(255,255,255,0.08);
     box-shadow: var(--shadow);
-    position: relative;
     display: grid;
     place-items: center;
 }
@@ -426,14 +436,14 @@ h2#loginTitle, h2#signupTitle {
     inset: 18% 14%;
     background: #000;
     opacity: .9;
-    border-radius: 14px;
+    border-radius: 14px
 }
 
 #questionMark {
     position: relative;
     font-size: clamp(64px, 8vw, 112px);
     color: #fff;
-    text-shadow: 0 10px 26px rgba(0,0,0,0.35);
+    text-shadow: 0 10px 26px rgba(0,0,0,0.35)
 }
 
 #tankLabel {
@@ -441,5 +451,110 @@ h2#loginTitle, h2#signupTitle {
     bottom: 14px;
     left: 14px;
     font-size: 14px;
-    color: var(--muted);
+    color: var(--muted)
+}
+
+/* SVG arrows */
+.navArrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 58px;
+    height: 58px;
+    border-radius: 16px;
+    border: 0;
+    background: linear-gradient(135deg, #2a3348, #1f2636);
+    color: #e1eaff;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: transform var(--speed), background var(--speed), opacity var(--speed);
+}
+
+#prevTank {
+    left: -78px
+}
+
+#nextTank {
+    right: -78px
+}
+
+.navArrow:hover svg {
+    transform: translateX(-2px)
+}
+
+#nextTank:hover svg {
+    transform: translateX(2px)
+}
+
+.navArrow:active svg {
+    transform: translateX(-6px)
+}
+
+#nextTank:active svg {
+    transform: translateX(6px)
+}
+
+.navArrow[disabled] {
+    opacity: .6;
+    pointer-events: none
+}
+
+.navArrow svg {
+    display: block;
+    margin: 0 auto;
+    transition: transform 160ms ease
+}
+/* === Overrides: solid colors + shimmer hover for landing buttons === */
+.btnPrimary,
+.btnSecondary {
+    position: relative;
+    overflow: hidden; /* needed for shimmer sweep */
+}
+
+/* Solid colors */
+.btnPrimary { /* Sign Up */
+    background: #3b82f6; /* blue */
+    color: #fff;
+}
+
+.btnSecondary { /* Log In */
+    background: #ef4444; /* red */
+    color: #fff;
+}
+
+    /* Keep the lift-on-hover but let shimmer handle the highlight */
+    .btnPrimary:hover,
+    .btnSecondary:hover {
+        filter: none;
+    }
+
+    /* Shimmer sweep */
+    .btnPrimary::before,
+    .btnSecondary::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -30%;
+        width: 30%;
+        height: 200%;
+        transform: skewX(-20deg) translateX(-120%);
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+        opacity: 0;
+        transition: opacity 180ms ease, transform 600ms ease;
+        pointer-events: none;
+    }
+
+    .btnPrimary:hover::before,
+    .btnSecondary:hover::before {
+        opacity: .9;
+        transform: skewX(-20deg) translateX(420%);
+    }
+
+/* Subtle active press */
+.btnPrimary:active {
+    background: #326fdc;
+}
+
+.btnSecondary:active {
+    background: #d73737;
 }

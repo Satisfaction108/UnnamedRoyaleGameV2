@@ -47,20 +47,32 @@
                 </div>
             </aside>
 
+            <!-- centered tank picker; arrows docked to the sides -->
             <section id="selectorWrap">
-                <button id="prevTank" class="navArrow">‹</button>
                 <div id="tankCard">
+                    <button id="prevTank" class="navArrow" aria-label="Previous">
+                        <svg id="svgPrev" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+                            <path id="svgPrevPath" d="M15.5 4.5L7.5 12l8 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    </button>
+
                     <div id="tankSilhouette"></div>
                     <div id="questionMark">?</div>
                     <div id="tankLabel">Select your tank</div>
+
+                    <button id="nextTank" class="navArrow" aria-label="Next">
+                        <svg id="svgNext" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+                            <path id="svgNextPath" d="M8.5 4.5L16.5 12l-8 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    </button>
                 </div>
-                <button id="nextTank" class="navArrow">›</button>
             </section>
         </div>
     </section>
 
     <div id="overlay" aria-hidden="true"></div>
 
+    <!-- LOGIN -->
     <dialog id="modalLogin">
         <div id="modalLoginInner">
             <h2 id="loginTitle">Log In</h2>
@@ -73,6 +85,10 @@
                     <label id="loginLabelPass" for="loginPassword">Password</label>
                     <input id="loginPassword" type="password" minlength="6" required>
                 </div>
+                <div id="loginRowRemember" class="rememberRow">
+                    <input id="loginRemember" type="checkbox" checked>
+                    <label id="loginLabelRemember" for="loginRemember">Remember me on this device</label>
+                </div>
                 <div id="loginActions" class="modalActions">
                     <button id="loginSubmit" class="btnPrimary" type="submit">Enter</button>
                     <button id="loginCancel" class="btnGhost" type="button">Cancel</button>
@@ -82,6 +98,7 @@
         </div>
     </dialog>
 
+    <!-- SIGNUP -->
     <dialog id="modalSignup">
         <div id="modalSignupInner">
             <h2 id="signupTitle">Create Account</h2>
