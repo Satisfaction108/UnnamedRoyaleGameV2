@@ -1,43 +1,46 @@
 ﻿const $ = (id) => document.getElementById(id)
 
 const state = { user:null, premium:'none', tankIndex:0 }
-
 const K = { remember:'rememberMe', user:'rememberUser', pass:'rememberPass' }
 
-function showLanding() {
+/* ---------- Notifications ---------- */
+function notify(msg){
+  let stack = $('notifyStack')
+  if(!stack){
+    stack = document.createElement('div')
+    stack.id = 'notifyStack'
+    document.body.appendChild(stack)
+  }
+  const el = document.createElement('div')
+  el.className = 'notify'
+  el.textContent = msg
+  stack.appendChild(el)
+  setTimeout(()=>{ el.classList.add('leaving'); setTimeout(()=>el.remove(),180) }, 2200)
+}
+
+/* ---------- Views ---------- */
+function showLanding(){
   $('landing').style.display = 'grid'
   $('landing').style.opacity = '1'
   $('mainMenu').removeAttribute('data-show')
   $('userBadge').textContent = ''
 }
-
-function showMainMenu() {
+function showMainMenu(){
   $('landing').style.display = 'none'
   $('mainMenu').setAttribute('data-show','true')
   $('accountName').textContent = state.user?.username || ''
   $('userBadge').textContent = state.user?.username ? `@${state.user.username}` : ''
 }
 
-function openModal(id) {
-  $('overlay').setAttribute('data-open','true')
-  const dlg = $(id)
-  if (!dlg.open) dlg.showModal()
-}
-function closeModal(id) {
-  $('overlay').removeAttribute('data-open')
-  const dlg = $(id)
-  if (dlg.open) dlg.close()
-}
+/* ---------- Modals ---------- */
+function openModal(id){ $('overlay').setAttribute('data-open','true'); const d=$(id); if(!d.open) d.showModal() }
+function closeModal(id){ $('overlay').removeAttribute('data-open'); const d=$(id); if(d.open) d.close() }
 
+/* ---------- Validation ---------- */
 function validateUsername(u){ return /^[a-zA-Z0-9_]{3,20}$/.test(u) }
-function validatePassword(p){
-  if(p.length<6) return false
-  if(!/\d/.test(p)) return false
-  if(!/[!@#$%^&*(),.?":{}|<>]/.test(p)) return false
-  if(!/[A-Z]/.test(p)) return false
-  return true
-}
+function validatePassword(p){ return p.length>=6 && /\d/.test(p) && /[!@#$%^&*(),.?":{}|<>]/.test(p) && /[A-Z]/.test(p) }
 
+/* ---------- Fetch helper ---------- */
 async function postJSON(path, body){
   const res = await fetch(path,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
   const type = res.headers.get('content-type') || ''
@@ -47,6 +50,7 @@ async function postJSON(path, body){
   return data
 }
 
+/* ---------- Remember me ---------- */
 function rememberChecked(){ return localStorage.getItem(K.remember)==='1' }
 function loadRememberUI(){
   const chk = $('loginRemember')
@@ -57,21 +61,16 @@ function loadRememberUI(){
 }
 function setRememberFlag(on){
   if(on){ localStorage.setItem(K.remember,'1') } else {
-    localStorage.removeItem(K.remember)
-    localStorage.removeItem(K.user)
-    localStorage.removeItem(K.pass)
+    localStorage.removeItem(K.remember); localStorage.removeItem(K.user); localStorage.removeItem(K.pass)
   }
 }
-function saveRememberUser(u){
-  if(rememberChecked()) localStorage.setItem(K.user, u || '')
-}
+function saveRememberUser(u){ if(rememberChecked()) localStorage.setItem(K.user, u || '') }
 function saveRememberCreds(u,p){
   if(rememberChecked()){
     localStorage.setItem(K.user, u || '')
     localStorage.setItem(K.pass, btoa(p || ''))
-  } else {
-    localStorage.removeItem(K.user)
-    localStorage.removeItem(K.pass)
+  }else{
+    localStorage.removeItem(K.user); localStorage.removeItem(K.pass)
   }
 }
 function getRememberCreds(){
@@ -82,33 +81,23 @@ function getRememberCreds(){
   return { on, u, p }
 }
 
+/* ---------- Bindings ---------- */
 function bindLanding(){
   $('btnSignup').addEventListener('click',()=>{
-    $('signupError').textContent=''
-    $('signupForm').reset()
-    openModal('modalSignup')
-    $('signupUsername').focus()
+    $('signupError').textContent=''; $('signupForm').reset()
+    openModal('modalSignup'); $('signupUsername').focus()
   })
   $('btnLogin').addEventListener('click',()=>{
-    $('loginError').textContent=''
-    $('loginForm').reset()
-    openModal('modalLogin')
-    setTimeout(loadRememberUI,0)
-    $('loginUsername').focus()
+    $('loginError').textContent=''; $('loginForm').reset()
+    openModal('modalLogin'); setTimeout(loadRememberUI,0); $('loginUsername').focus()
   })
 }
-
 function bindModals(){
   $('loginCancel').addEventListener('click',()=>closeModal('modalLogin'))
   $('signupCancel').addEventListener('click',()=>closeModal('modalSignup'))
 
-  $('loginRemember').addEventListener('change',e=>{
-    setRememberFlag(e.target.checked)
-    if(!e.target.checked){ $('loginUsername').value='' }
-  })
-  $('loginUsername').addEventListener('input',e=>{
-    if(rememberChecked()) saveRememberUser(e.target.value.trim())
-  })
+  $('loginRemember').addEventListener('change',e=>{ setRememberFlag(e.target.checked); if(!e.target.checked){ $('loginUsername').value='' } })
+  $('loginUsername').addEventListener('input',e=>{ if(rememberChecked()) saveRememberUser(e.target.value.trim()) })
 
   $('loginForm').addEventListener('submit',async e=>{
     e.preventDefault()
@@ -124,6 +113,7 @@ function bindModals(){
       if($('loginRemember').checked) saveRememberCreds(username,password)
       closeModal('modalLogin')
       showMainMenu()
+      notify('Logged In!')
     }catch(err){
       $('loginError').textContent = String(err.message||err)
     }
@@ -144,12 +134,12 @@ function bindModals(){
       state.premium = 'none'
       closeModal('modalSignup')
       showMainMenu()
+      notify('Logged In!')
     }catch(err){
       $('signupError').textContent = String(err.message||err)
     }
   })
 }
-
 function bindMainMenu(){
   $('btnRefresh').addEventListener('click',async()=>{
     try{
@@ -162,6 +152,7 @@ function bindMainMenu(){
       $('statVal1').textContent = data.wins ?? 0
       $('statVal2').textContent = data.losses ?? 0
       $('statVal3').textContent = data.prisms ?? 0
+      notify('Successfully Refreshed Stats!')
     }catch(e){}
   })
 
@@ -181,16 +172,16 @@ function bindMainMenu(){
   })
 }
 
+/* ---------- Tank selector ---------- */
 function nudgeTank(dir){
   const card = $('tankCard')
   card.animate([{transform:'scale(1)'},{transform:'scale(.985)'},{transform:'scale(1)'}],{ duration:180, easing:'ease-out' })
   state.tankIndex = (state.tankIndex + dir + 10) % 10
 }
 
+/* ---------- Boot ---------- */
 async function boot(){
-  bindLanding()
-  bindModals()
-  bindMainMenu()
+  bindLanding(); bindModals(); bindMainMenu()
 
   try{
     const res = await fetch('/api/me')
@@ -211,6 +202,7 @@ async function boot(){
       state.user = { username:data.username, premium:data.premium||'none' }
       state.premium = state.user.premium
       showMainMenu()
+      notify('Automatically Logged In!')
       return
     }catch(e){}
   }

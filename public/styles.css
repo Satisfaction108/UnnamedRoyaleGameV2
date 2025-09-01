@@ -558,3 +558,403 @@ h2#loginTitle, h2#signupTitle {
 .btnSecondary:active {
     background: #d73737;
 }
+/* === Notifications (bottom, green) === */
+#notifyStack {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    display: grid;
+    gap: 10px;
+    z-index: 50;
+    pointer-events: none
+}
+
+.notify {
+    pointer-events: none;
+    min-width: 260px;
+    text-align: center;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-weight: 800;
+    letter-spacing: .2px;
+    color: #062013; /* readable on green */
+    background: linear-gradient(180deg,#22c55e,#16a34a);
+    border: 1px solid rgba(255,255,255,.22);
+    box-shadow: 0 14px 30px rgba(0,0,0,.35);
+    animation: notifyIn .22s ease both
+}
+
+    .notify.leaving {
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity .18s ease,transform .18s ease
+    }
+
+@keyframes notifyIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px)
+    }
+
+    to {
+        opacity: 1;
+        transform: none
+    }
+}
+
+/* === Tank selector: dead-center & full-height arrows === */
+#selectorWrap {
+    position: fixed; /* ignore side panel: center on viewport */
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%,-50%);
+    width: auto;
+    display: grid;
+    place-items: center;
+    z-index: 1
+}
+
+#tankCard {
+    position: relative;
+    width: min(900px,70vw);
+    aspect-ratio: 2.2/1;
+}
+
+/* side arrows sized to match the tank card height */
+:root {
+    --arrowW: 72px
+}
+
+.navArrow {
+    position: absolute;
+    top: 0;
+    bottom: 0; /* full height */
+    height: 100%;
+    width: var(--arrowW);
+    border-radius: 18px;
+    border: 0;
+    background: linear-gradient(135deg,#2a3348,#1f2636);
+    color: #e1eaff;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35),0 8px 16px rgba(0,0,0,.25);
+    transition: transform .24s ease,background .24s ease,opacity .18s ease
+}
+
+#prevTank {
+    left: calc(-1 * (var(--arrowW) + 16px))
+}
+
+#nextTank {
+    right: calc(-1 * (var(--arrowW) + 16px))
+}
+
+.navArrow:hover svg {
+    transform: translateX(-2px)
+}
+
+#nextTank:hover svg {
+    transform: translateX(2px)
+}
+
+.navArrow[disabled] {
+    opacity: .6;
+    pointer-events: none
+}
+
+.navArrow svg {
+    width: 40px;
+    height: 40px;
+    transition: transform .16s ease
+}
+
+@media (max-width:900px) {
+    :root {
+        --arrowW: 56px
+    }
+}
+/* === Fix: tank selector arrows (dock + exact inner height) === */
+
+/* control the inner panel inset once, reuse for arrows */
+:root {
+    --silInsetY: 18%; /* top/bottom inset of black inner panel */
+    --silInsetX: 14%; /* left/right inset of black inner panel */
+    --arrowW: 72px; /* arrow width */
+}
+
+/* ensure the silhouette uses the same inset vars */
+#tankSilhouette {
+    inset: var(--silInsetY) var(--silInsetX);
+}
+
+/* center the whole selector on the viewport */
+#selectorWrap {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: auto;
+    display: grid;
+    place-items: center;
+    z-index: 1;
+}
+
+/* arrows: height matches the inner panel, docked to card edge */
+.navArrow {
+    position: absolute;
+    top: var(--silInsetY);
+    bottom: var(--silInsetY); /* full height of inner panel */
+    width: var(--arrowW);
+    border-radius: 18px;
+    border: 0;
+    background: linear-gradient(135deg, #2a3348, #1f2636);
+    color: #e1eaff;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), 0 8px 16px rgba(0,0,0,.25);
+    transition: transform .24s ease, background .24s ease, opacity .18s ease;
+}
+
+/* flush against the card edge (no extra gap) */
+#prevTank {
+    left: calc(-1 * var(--arrowW));
+}
+
+#nextTank {
+    right: calc(-1 * var(--arrowW));
+}
+
+/* tidy the icon size & hover nudge */
+.navArrow svg {
+    width: 36px;
+    height: 36px;
+    transition: transform 160ms ease;
+}
+
+#prevTank:hover svg {
+    transform: translateX(-2px);
+}
+
+#nextTank:hover svg {
+    transform: translateX( 2px);
+}
+
+.navArrow[disabled] {
+    opacity: .6;
+    pointer-events: none;
+}
+
+/* responsive width tweak */
+@media (max-width: 900px) {
+    :root {
+        --arrowW: 56px;
+    }
+}
+/* === Final Fix: Tank selector arrows align with silhouette === */
+:root {
+    --silInsetY: 18%; /* vertical inset of silhouette */
+    --silInsetX: 14%; /* horizontal inset of silhouette */
+    --arrowW: 72px; /* arrow width */
+}
+
+#selectorWrap {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: auto;
+    display: grid;
+    place-items: center;
+    z-index: 1;
+}
+
+#tankSilhouette {
+    inset: var(--silInsetY) var(--silInsetX); /* keep consistent with vars */
+}
+
+.navArrow {
+    position: absolute;
+    top: var(--silInsetY);
+    bottom: var(--silInsetY); /* match silhouette vertical */
+    width: var(--arrowW);
+    border-radius: 18px;
+    border: 0;
+    background: linear-gradient(135deg, #2a3348, #1f2636);
+    color: #e1eaff;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), 0 8px 16px rgba(0,0,0,.25);
+    transition: transform .24s ease, background .24s ease, opacity .18s ease;
+}
+
+#prevTank {
+    left: calc(-1 * var(--arrowW));
+}
+
+#nextTank {
+    right: calc(-1 * var(--arrowW));
+}
+
+.navArrow svg {
+    width: 36px;
+    height: 36px;
+    transition: transform 160ms ease;
+}
+
+#prevTank:hover svg {
+    transform: translateX(-2px);
+}
+
+#nextTank:hover svg {
+    transform: translateX(2px);
+}
+
+.navArrow[disabled] {
+    opacity: .6;
+    pointer-events: none;
+}
+
+@media (max-width: 900px) {
+    :root {
+        --arrowW: 56px;
+    }
+}
+/* === Hard Fix: Tank selector arrows align with inner silhouette === */
+:root {
+    /* keep these here so they override earlier duplicates */
+    --silInsetY: 18%; /* vertical inset of the black silhouette */
+    --silInsetX: 14%; /* horizontal inset of the black silhouette */
+    --arrowW: 72px; /* arrow column width */
+}
+
+/* ensure silhouette + arrows share the same inset math */
+#tankSilhouette {
+    position: absolute;
+    inset: var(--silInsetY) var(--silInsetX) !important;
+}
+
+/* center selector on viewport (ignores side panel) */
+#selectorWrap {
+    position: fixed !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: auto !important;
+    display: grid !important;
+    place-items: center !important;
+    z-index: 1 !important;
+}
+
+/* arrows: same vertical span as the silhouette, flush to card edge */
+#tankCard .navArrow {
+    position: absolute !important;
+    top: var(--silInsetY) !important;
+    bottom: var(--silInsetY) !important;
+    height: auto !important; /* use top/bottom instead of fixed height */
+    width: var(--arrowW) !important;
+    border-radius: 18px;
+    border: 0;
+    background: linear-gradient(135deg, #2a3348, #1f2636);
+    color: #e1eaff;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), 0 8px 16px rgba(0,0,0,.25);
+    transition: transform .24s ease, background .24s ease, opacity .18s ease;
+    z-index: 2; /* sit above the card */
+}
+
+/* dock to the card edges with no extra gap */
+#tankCard #prevTank {
+    left: calc(-1 * var(--arrowW)) !important;
+}
+
+#tankCard #nextTank {
+    right: calc(-1 * var(--arrowW)) !important;
+}
+
+/* tidy the icon size + nudge on hover */
+#tankCard .navArrow svg {
+    width: 36px !important;
+    height: 36px !important;
+    transition: transform 160ms ease;
+}
+
+#tankCard #prevTank:hover svg {
+    transform: translateX(-2px);
+}
+
+#tankCard #nextTank:hover svg {
+    transform: translateX( 2px);
+}
+
+#tankCard .navArrow[disabled] {
+    opacity: .6;
+    pointer-events: none;
+}
+
+/* responsive tweak */
+@media (max-width: 900px) {
+    :root {
+        --arrowW: 56px;
+    }
+}
+/* === Center the entire selector (arrows + card) on the viewport === */
+#selectorWrap {
+    position: fixed !important; /* take it out of the grid */
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: auto !important; /* let #tankCard size itself */
+    display: grid !important;
+    place-items: center !important;
+    z-index: 5 !important;
+    pointer-events: none; /* keep layout clean; re-enable below */
+}
+
+    #selectorWrap > * {
+        pointer-events: auto;
+    }
+
+/* Keep arrows hugging the card but centered vertically */
+#tankCard {
+    position: relative !important;
+    width: min(900px, 70vw) !important;
+}
+
+    #tankCard .navArrow {
+        position: absolute !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important; /* vertical center */
+        width: 72px !important; /* keep your paddle width */
+        border-radius: 18px !important;
+        z-index: 6 !important;
+    }
+
+/* one on each side of the centered card */
+#prevTank {
+    left: -72px !important;
+}
+
+#nextTank {
+    right: -72px !important;
+}
+
+/* responsive nudge so they never drift */
+@media (max-width: 900px) {
+    #tankCard .navArrow {
+        width: 56px !important;
+    }
+
+    #prevTank {
+        left: -56px !important;
+    }
+
+    #nextTank {
+        right: -56px !important;
+    }
+}
