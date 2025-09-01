@@ -1,4 +1,3 @@
-// index.js (ESM) — serves ./public, file-based users, matchmaking WS on :3001
 import express from 'express'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -13,27 +12,21 @@ const __dirname = path.dirname(__filename)
 const app = express()
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000
 
-// ---------- static frontend (points at ./public) ----------
 const PUB_ROOT = path.join(__dirname, 'public')
 app.use(express.static(PUB_ROOT))
 app.get('/', (req, res) => res.sendFile(path.join(PUB_ROOT, 'index.html')))
 
-// ---------- basic JSON helpers ----------
 app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
 
-// ---------- file-based users ----------
 const USERS_DIR = path.join(__dirname, 'users')
 await fs.mkdir(USERS_DIR, { recursive: true })
 
 function validUsername(u) { return /^[a-zA-Z0-9_]{3,20}$/.test(u) }
 function userPath(u) { return path.join(USERS_DIR, `${u}.json`) }
-async function readUser(u) {
-  try { return JSON.parse(await fs.readFile(userPath(u), 'utf8')) } catch { return null }
-}
+async function readUser(u) { try { return JSON.parse(await fs.readFile(userPath(u), 'utf8')) } catch { return null } }
 async function writeUser(u, data) { await fs.writeFile(userPath(u), JSON.stringify(data, null, 2), 'utf8') }
 
-// ---------- cookie sessions (in-memory) ----------
 const sessions = new Map()
 function parseCookies(header='') {
   const out = {}
@@ -62,7 +55,6 @@ function requireAuth(req, res) {
   return sess
 }
 
-// ---------- auth routes ----------
 app.post('/api/signup', async (req, res) => {
   try {
     const { username, password } = req.body || {}
@@ -113,14 +105,9 @@ app.get('/api/me', async (req, res) => {
   res.json({ ok:true, username:user.username, premium:user.premium||'none', wins:user.wins||0, losses:user.losses||0, prisms:user.prisms||0 })
 })
 
-// ---------- start HTTP ----------
-app.listen(PORT, () => console.log(`HTTP listening on http://localhost:${PORT}`))
+const server = app.listen(PORT, () => console.log(`HTTP listening on http://localhost:${PORT}`))
 
-// ---------- matchmaking WS (separate port 3001) ----------
-const WS_PORT = process.env.WS_PORT ? Number(process.env.WS_PORT) : 3001
-const wss = new WebSocketServer({ port: WS_PORT })
-console.log(`[WS] listening on ws://localhost:${WS_PORT}`)
-
+const wss = new WebSocketServer({ noServer: true })
 const queue = []
 const inGame = new Map()
 
@@ -137,6 +124,7 @@ function removeFromQueue(ws) {
 wss.on('connection', ws => {
   ws._id = randomUUID()
   ws._status = 'idle'
+  send(ws, { type:'hello' })
 
   ws.on('message', raw => {
     let msg = null
@@ -155,11 +143,9 @@ wss.on('connection', ws => {
         const a = queue.shift()
         const b = queue.shift()
         broadcastQueue()
-        const players = [
-          { id: randomUUID(), ws: a },
-          { id: randomUUID(), ws: b }
-        ]
-        a._status = 'ingame'; b._status = 'ingame'
+        const players = [{ id: randomUUID(), ws: a }, { id: randomUUID(), ws: b }]
+        a._status = 'ingame'
+        b._status = 'ingame'
         const game = new Game(players)
         players.forEach(p => inGame.set(p.ws, game))
         game.onEnd = () => {
@@ -188,6 +174,14 @@ wss.on('connection', ws => {
     const game = inGame.get(ws)
     if (game) game.end('dc')
   })
+})
 
-  send(ws, { type:'hello', wsPort: WS_PORT })
+server.on('upgrade', (req, socket, head) => {
+  if (req.url === '/ws') {
+    wss.handleUpgrade(req, socket, head, ws => {
+      wss.emit('connection', ws, req)
+    })
+  } else {
+    socket.destroy()
+  }
 })

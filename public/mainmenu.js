@@ -5,6 +5,7 @@ const state = {
   premium: 'none',
   tankIndex: 0,
   ws: null,
+  wsBuffer: [],
   inQueue: false,
   inGame: false,
   myId: null,
@@ -180,6 +181,7 @@ function bindMainMenu(){
     if(!state.user){ notify('Log in first'); return }
     ensureSocket()
     showQueue()
+    state.inQueue = true
     sendWS({ type:'joinQueue' })
     $('btnBattle').disabled = true
     setTimeout(()=>{ $('btnBattle').disabled=false },600)
@@ -187,6 +189,7 @@ function bindMainMenu(){
 
   $('btnQueueCancel').addEventListener('click',()=>{
     sendWS({ type:'leaveQueue' })
+    state.inQueue = false
     hideQueue()
   })
 
@@ -203,30 +206,28 @@ function nudgeTank(dir){
   state.tankIndex = (state.tankIndex + dir + 10) % 10
 }
 
-/* Queue UI */
 function showQueue(){
   $('queueScreen').hidden = false
   $('queueCountNum').textContent = '1'
 }
 function hideQueue(){ $('queueScreen').hidden = true }
 
-/* Game UI */
 function showGame(){
   $('gameView').hidden = false
   $('mainMenu').removeAttribute('data-show')
 }
 function hideGame(){ $('gameView').hidden = true }
 
-/* WS */
 function ensureSocket(){
-  if (state.ws && state.ws.readyState === 1) return
+  if (state.ws && (state.ws.readyState === 0 || state.ws.readyState === 1)) return
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const host = location.hostname
-  const port = 3001
-  const url = `${proto}://${host}:${port}`
+  const url = `${proto}://${location.host}/ws`
   const ws = new WebSocket(url)
   state.ws = ws
-  ws.onopen = () => {}
+  ws.onopen = () => {
+    const buf = state.wsBuffer.splice(0)
+    for (const m of buf) try { ws.send(JSON.stringify(m)) } catch {}
+  }
   ws.onclose = () => {}
   ws.onmessage = ev => {
     let m = null
@@ -253,10 +254,11 @@ function ensureSocket(){
   }
 }
 function sendWS(obj){
-  if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(obj))
+  const ws = state.ws
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj))
+  else state.wsBuffer.push(obj)
 }
 
-/* Game client */
 function startGame(w, h){
   hideQueue()
   showGame()
@@ -306,7 +308,6 @@ function loop(){
   state.anim = requestAnimationFrame(loop)
 }
 
-/* Boot */
 async function boot(){
   bindLanding(); bindModals(); bindMainMenu()
   try{
