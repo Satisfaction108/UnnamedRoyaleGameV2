@@ -6,14 +6,7 @@ const state = {
   tankIndex: 0,
   ws: null,
   wsBuffer: [],
-  inQueue: false,
-  inGame: false,
-  myId: null,
-  players: [],
-  canvas: null,
-  ctx: null,
-  keys: { w:false, a:false, s:false, d:false },
-  anim: null
+  inQueue: false
 }
 
 const K = { remember:'rememberMe', user:'rememberUser', pass:'rememberPass' }
@@ -37,14 +30,16 @@ function showLanding(){
   $('landing').style.opacity = '1'
   $('mainMenu').removeAttribute('data-show')
   $('userBadge').textContent = ''
+  $('queueScreen').hidden = true
+  $('gameView').hidden = true
 }
 function showMainMenu(){
-  hideQueue()
-  hideGame()
   $('landing').style.display = 'none'
   $('mainMenu').setAttribute('data-show','true')
   $('accountName').textContent = state.user?.username || ''
   $('userBadge').textContent = state.user?.username ? `@${state.user.username}` : ''
+  $('queueScreen').hidden = true
+  $('gameView').hidden = true
 }
 
 function openModal(id){ $('overlay').setAttribute('data-open','true'); const d=$(id); if(!d.open) d.showModal() }
@@ -120,7 +115,6 @@ function bindModals(){
     try{
       const data = await postJSON('/api/login',{ username, password })
       state.user = { username:data.username, premium:data.premium||'none' }
-      state.premium = state.user.premium
       if($('loginRemember')?.checked) saveRememberCreds(username,password)
       closeModal('modalLogin')
       showMainMenu()
@@ -142,7 +136,6 @@ function bindModals(){
     try{
       const data = await postJSON('/api/signup',{ username, password })
       state.user = { username:data.username, premium:'none' }
-      state.premium = 'none'
       closeModal('modalSignup')
       showMainMenu()
       notify('Logged In!')
@@ -194,10 +187,11 @@ function bindMainMenu(){
   })
 
   $('btnExitGame').addEventListener('click',()=>{
-    sendWS({ type:'leaveGame' })
-    stopGame()
+    if (window.GameClient) window.GameClient.exit()
     showMainMenu()
   })
+
+  window.__onMatchEnd = ()=>{ showMainMenu(); notify('Match ended') }
 }
 
 function nudgeTank(dir){
@@ -206,17 +200,8 @@ function nudgeTank(dir){
   state.tankIndex = (state.tankIndex + dir + 10) % 10
 }
 
-function showQueue(){
-  $('queueScreen').hidden = false
-  $('queueCountNum').textContent = '1'
-}
+function showQueue(){ $('queueScreen').hidden = false; $('queueCountNum').textContent = '1' }
 function hideQueue(){ $('queueScreen').hidden = true }
-
-function showGame(){
-  $('gameView').hidden = false
-  $('mainMenu').removeAttribute('data-show')
-}
-function hideGame(){ $('gameView').hidden = true }
 
 function ensureSocket(){
   if (state.ws && (state.ws.readyState === 0 || state.ws.readyState === 1)) return
@@ -224,94 +209,31 @@ function ensureSocket(){
   const url = `${proto}://${location.host}/ws`
   const ws = new WebSocket(url)
   state.ws = ws
-ws.onopen = () => {
-  const buf = state.wsBuffer.splice(0)
-  for (const m of buf) try { ws.send(JSON.stringify(m)) } catch {}
-}
+  window.__wsRef = ws
 
-ws.onerror = () => {
-  notify('Can’t connect to server. Is it running?')
-}
-
-ws.onclose = () => {}
+  ws.onopen = () => {
+    const buf = state.wsBuffer.splice(0)
+    for (const m of buf) try { ws.send(JSON.stringify(m)) } catch {}
+  }
+  ws.onerror = () => notify('Can’t connect to server. Is it running?')
+  ws.onclose = () => {}
 
 ws.onmessage = ev => {
-    let m = null
-    try { m = JSON.parse(ev.data) } catch { return }
-    if (!m) return
-    if (m.type === 'hello') {}
-    if (m.type === 'queueCount') $('queueCountNum').textContent = String(m.n)
-    if (m.type === 'queued') {}
-    if (m.type === 'matchStart') {
-      state.inQueue = false
-      state.inGame = true
-      state.myId = m.you
-      startGame(m.w, m.h)
-    }
-    if (m.type === 'state') {
-      state.players = m.players || []
-    }
-    if (m.type === 'matchEnd') {
-      stopGame()
-      hideGame()
-      showMainMenu()
-      notify('Match ended')
-    }
-  }
+  let m = null
+  try { m = JSON.parse(ev.data) } catch { return }
+  if (!m) return
+  console.log('[WS<-]', m.type)
+
+  if (window.GameClient && window.GameClient.handle(m)) return
+  if (m.type === 'hello') return
+  if (m.type === 'queueCount') $('queueCountNum').textContent = String(m.n)
+}
+
 }
 function sendWS(obj){
   const ws = state.ws
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj))
   else state.wsBuffer.push(obj)
-}
-
-function startGame(w, h){
-  hideQueue()
-  showGame()
-  state.canvas = $('gameCanvas')
-  state.ctx = state.canvas.getContext('2d')
-  state.canvas.width = w
-  state.canvas.height = h
-  window.addEventListener('keydown', onKey, { passive:false })
-  window.addEventListener('keyup', onKey, { passive:false })
-  loop()
-}
-function stopGame(){
-  state.inGame = false
-  try { cancelAnimationFrame(state.anim) } catch {}
-  window.removeEventListener('keydown', onKey)
-  window.removeEventListener('keyup', onKey)
-  state.players = []
-}
-function onKey(e){
-  const k = e.key.toLowerCase()
-  if (['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright'].includes(k)) e.preventDefault()
-  let changed = false
-  if (e.type === 'keydown') {
-    if (k==='w'||k==='arrowup') { if(!state.keys.w){ state.keys.w=true; changed=true } }
-    if (k==='a'||k==='arrowleft') { if(!state.keys.a){ state.keys.a=true; changed=true } }
-    if (k==='s'||k==='arrowdown') { if(!state.keys.s){ state.keys.s=true; changed=true } }
-    if (k==='d'||k==='arrowright') { if(!state.keys.d){ state.keys.d=true; changed=true } }
-  } else {
-    if (k==='w'||k==='arrowup') { if(state.keys.w){ state.keys.w=false; changed=true } }
-    if (k==='a'||k==='arrowleft') { if(state.keys.a){ state.keys.a=false; changed=true } }
-    if (k==='s'||k==='arrowdown') { if(state.keys.s){ state.keys.s=false; changed=true } }
-    if (k==='d'||k==='arrowright') { if(state.keys.d){ state.keys.d=false; changed=true } }
-  }
-  if (changed) sendWS({ type:'input', ...state.keys })
-}
-function loop(){
-  if (!state.inGame) return
-  const ctx = state.ctx, c = state.canvas
-  ctx.clearRect(0,0,c.width,c.height)
-  ctx.fillStyle = '#0ea5e9'
-  state.players.forEach(p=>{
-    const r = 14
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, r, 0, Math.PI*2)
-    ctx.fill()
-  })
-  state.anim = requestAnimationFrame(loop)
 }
 
 async function boot(){
@@ -332,7 +254,6 @@ async function boot(){
     try{
       const data = await postJSON('/api/login',{ username:u, password:p })
       state.user = { username:data.username, premium:data.premium||'none' }
-      state.premium = state.user.premium
       showMainMenu()
       notify('Automatically Logged In!')
       return

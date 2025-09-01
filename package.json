@@ -1,12 +1,20 @@
 {
-    "name": "unnamed-royale-game",
+    "name": "unnamed-royale-game-v2",
     "version": "1.0.0",
+    "description": "Battle Royale prototype with accounts, queue, and WASD gameplay",
     "type": "module",
+    "main": "index.js",
     "scripts": {
-        "start": "node index.js"
+        "start": "cross-env NODE_ENV=production node index.js",
+        "dev": "cross-env NODE_ENV=development nodemon index.js"
     },
     "dependencies": {
         "express": "^4.19.2",
-        "ws": "^8.18.3"
+        "pnpm": "^10.15.1",
+        "ws": "^8.18.0"
+    },
+    "devDependencies": {
+        "cross-env": "^7.0.3",
+        "nodemon": "^3.1.0"
     }
 }

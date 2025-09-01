@@ -659,3 +659,30 @@ h2#loginTitle, h2#signupTitle {
     #gameView[hidden] {
         display: none;
     }
+#gameView {
+    background: #000;
+    align-items: stretch;
+    padding: 0;
+}
+
+#gameCanvas {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    background: #000;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+#btnExitGame {
+    position: fixed;
+    right: calc(1.6 * var(--u));
+    top: calc(1.6 * var(--u));
+    background: #111827;
+    color: #e5e7eb;
+    border: 1px solid rgba(255,255,255,.16);
+    z-index: 5;
+}
