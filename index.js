@@ -1,212 +1,193 @@
-const $ = (id) => document.getElementById(id)
+// index.js (ESM) — serves ./public, file-based users, matchmaking WS on :3001
+import express from 'express'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { promises as fs } from 'fs'
+import { randomUUID } from 'crypto'
+import { WebSocketServer } from 'ws'
+import Game from './game.js'
 
-const state = {
-  user: null,
-  premium: 'none',
-  tankIndex: 0
-}
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-function showLanding() {
-  $('landing').style.display = 'grid'
-  $('landing').style.opacity = '1'
-  $('mainMenu').removeAttribute('data-show')
-  $('userBadge').textContent = ''
-}
+const app = express()
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3000
 
-function showMainMenu() {
-  $('landing').style.display = 'none'
-  $('mainMenu').setAttribute('data-show', 'true')
-  $('accountName').textContent = state.user?.username || ''
-  $('userBadge').textContent = state.user?.username ? `@${state.user.username}` : ''
-}
+// ---------- static frontend (points at ./public) ----------
+const PUB_ROOT = path.join(__dirname, 'public')
+app.use(express.static(PUB_ROOT))
+app.get('/', (req, res) => res.sendFile(path.join(PUB_ROOT, 'index.html')))
 
-/* overlay + dialogs */
-function openModal(modalId) {
-  $('overlay').setAttribute('data-open', 'true')
-  const dlg = $(modalId)
-  if (!dlg.open) dlg.showModal()
-}
-function closeModal(modalId) {
-  $('overlay').removeAttribute('data-open')
-  const dlg = $(modalId)
-  if (dlg.open) dlg.close()
-}
+// ---------- basic JSON helpers ----------
+app.use(express.json())
+app.use(express.urlencoded({ extended: false }))
 
-/* validation */
-function validateUsername(u) { return /^[a-zA-Z0-9_]{3,20}$/.test(u) }
-function validatePassword(p) {
-  if (p.length < 6) return false
-  if (!/\d/.test(p)) return false
-  if (!/[!@#$%^&*(),.?":{}|<>]/.test(p)) return false
-  if (!/[A-Z]/.test(p)) return false
-  return true
-}
+// ---------- file-based users ----------
+const USERS_DIR = path.join(__dirname, 'users')
+await fs.mkdir(USERS_DIR, { recursive: true })
 
-/* fetch helper */
-async function postJSON(path, body) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+function validUsername(u) { return /^[a-zA-Z0-9_]{3,20}$/.test(u) }
+function userPath(u) { return path.join(USERS_DIR, `${u}.json`) }
+async function readUser(u) {
+  try { return JSON.parse(await fs.readFile(userPath(u), 'utf8')) } catch { return null }
+}
+async function writeUser(u, data) { await fs.writeFile(userPath(u), JSON.stringify(data, null, 2), 'utf8') }
+
+// ---------- cookie sessions (in-memory) ----------
+const sessions = new Map()
+function parseCookies(header='') {
+  const out = {}
+  header.split(';').forEach(kv => {
+    const i = kv.indexOf('=')
+    if (i > -1) out[kv.slice(0,i).trim()] = decodeURIComponent(kv.slice(i+1).trim())
   })
-  const contentType = res.headers.get('content-type') || ''
-  if (!contentType.includes('application/json')) throw new Error('Invalid response')
-  const data = await res.json()
-  if (!res.ok || data.ok === false) throw new Error(data?.error || 'Request failed')
-  return data
+  return out
+}
+function setCookie(res, name, value, opts={}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`]
+  if (opts.path) parts.push(`Path=${opts.path}`)
+  if (opts.httpOnly) parts.push('HttpOnly')
+  if (opts.maxAge != null) parts.push(`Max-Age=${opts.maxAge}`)
+  if (opts.sameSite) parts.push(`SameSite=${opts.sameSite}`)
+  if (opts.secure) parts.push('Secure')
+  res.setHeader('Set-Cookie', parts.join('; '))
+}
+function getSession(req) {
+  const sid = parseCookies(req.headers.cookie || '').sid
+  return sid ? sessions.get(sid) || null : null
+}
+function requireAuth(req, res) {
+  const sess = getSession(req)
+  if (!sess) { res.status(401).json({ ok:false, error:'not_logged_in' }); return null }
+  return sess
 }
 
-/* remember me */
-function loadRemembered() {
-  const remembered = localStorage.getItem('rememberMe') === '1'
-  if (remembered) {
-    const u = localStorage.getItem('rememberUser') || ''
-    $('loginRemember').checked = true
-    if (u) $('loginUsername').value = u
-  } else {
-    $('loginRemember').checked = false
+// ---------- auth routes ----------
+app.post('/api/signup', async (req, res) => {
+  try {
+    const { username, password } = req.body || {}
+    if (!validUsername(username)) return res.status(400).json({ ok:false, error:'invalid_username' })
+    if (typeof password !== 'string' || password.length < 6) return res.status(400).json({ ok:false, error:'invalid_password' })
+    if (await readUser(username)) return res.status(409).json({ ok:false, error:'username_taken' })
+    const user = { username, password, premium:'none', wins:0, losses:0, prisms:0, createdAt:Date.now() }
+    await writeUser(username, user)
+    const sid = randomUUID()
+    sessions.set(sid, { username })
+    setCookie(res, 'sid', sid, { path:'/', httpOnly:true, maxAge:60*60*24*7, sameSite:'Lax' })
+    res.json({ ok:true, username:user.username, premium:user.premium })
+  } catch {
+    res.status(500).json({ ok:false, error:'signup_failed' })
   }
-}
-function saveRememberChoice(username) {
-  const remember = $('loginRemember').checked
-  if (remember) {
-    localStorage.setItem('rememberMe', '1')
-    if (username) localStorage.setItem('rememberUser', username)
-  } else {
-    localStorage.removeItem('rememberMe')
-    localStorage.removeItem('rememberUser')
+})
+
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body || {}
+    if (!validUsername(username)) return res.status(400).json({ ok:false, error:'invalid_username' })
+    const user = await readUser(username)
+    if (!user || user.password !== password) return res.status(401).json({ ok:false, error:'bad_credentials' })
+    const sid = randomUUID()
+    sessions.set(sid, { username })
+    setCookie(res, 'sid', sid, { path:'/', httpOnly:true, maxAge:60*60*24*7, sameSite:'Lax' })
+    res.json({ ok:true, username:user.username, premium:user.premium })
+  } catch {
+    res.status(500).json({ ok:false, error:'login_failed' })
   }
-}
+})
 
-/* bindings */
-function bindLanding() {
-  $('btnSignup').addEventListener('click', () => {
-    $('signupError').textContent = ''
-    $('signupForm').reset()
-    openModal('modalSignup')
-    $('signupUsername').focus()
-  })
-  $('btnLogin').addEventListener('click', () => {
-    $('loginError').textContent = ''
-    $('loginForm').reset()
-    openModal('modalLogin')
-    // load remembered username/choice
-    setTimeout(loadRemembered, 0)
-    $('loginUsername').focus()
-  })
-}
-
-function bindModals() {
-  $('loginCancel').addEventListener('click', () => closeModal('modalLogin'))
-  $('signupCancel').addEventListener('click', () => closeModal('modalSignup'))
-
-  $('loginForm').addEventListener('submit', async (e) => {
-    e.preventDefault()
-    $('loginError').textContent = ''
-    const username = $('loginUsername').value.trim()
-    const password = $('loginPassword').value
-    if (!validateUsername(username)) { $('loginError').textContent = 'Invalid username'; return }
-    if (password.length < 6) { $('loginError').textContent = 'Invalid password'; return }
-    try {
-      const data = await postJSON('/api/login', { username, password })
-      state.user = { username: data.username, premium: data.premium || 'none' }
-      state.premium = state.user.premium
-      saveRememberChoice(username)
-      closeModal('modalLogin')
-      showMainMenu()
-    } catch (err) {
-      $('loginError').textContent = String(err.message || err)
-    }
-  })
-
-  $('signupForm').addEventListener('submit', async (e) => {
-    e.preventDefault()
-    $('signupError').textContent = ''
-    const username = $('signupUsername').value.trim()
-    const password = $('signupPassword').value
-    const confirm = $('signupConfirm').value
-    if (!validateUsername(username)) { $('signupError').textContent = '3–20 letters, numbers, underscores'; return }
-    if (!validatePassword(password)) { $('signupError').textContent = 'Needs 6+ chars, number, special, uppercase'; return }
-    if (password !== confirm) { $('signupError').textContent = 'Passwords do not match'; return }
-    try {
-      const data = await postJSON('/api/signup', { username, password })
-      state.user = { username: data.username, premium: 'none' }
-      state.premium = 'none'
-      // if they signed up, respect remember me choice later during first login
-      closeModal('modalSignup')
-      showMainMenu()
-    } catch (err) {
-      $('signupError').textContent = String(err.message || err)
-    }
-  })
-}
-
-function bindMainMenu() {
-  $('btnRefresh').addEventListener('click', async () => {
-    try {
-      const res = await fetch('/api/me')
-      if (!res.ok) throw new Error('Failed to refresh')
-      const data = await res.json()
-      state.user = { username: data.username, premium: data.premium || 'none' }
-      $('accountName').textContent = state.user.username
-      $('userBadge').textContent = `@${state.user.username}`
-      $('statVal1').textContent = data.wins ?? 0
-      $('statVal2').textContent = data.losses ?? 0
-      $('statVal3').textContent = data.prisms ?? 0
-    } catch (e) {
-      console.warn(e)
-    }
-  })
-
-  $('btnLogout').addEventListener('click', async () => {
-    try { await fetch('/api/logout', { method: 'POST' }) } catch {}
-    state.user = null
-    showLanding()
-  })
-
-  const stall = (btn) => {
-    btn.setAttribute('disabled', 'true')
-    setTimeout(() => btn.removeAttribute('disabled'), 180)
+app.post('/api/logout', async (req, res) => {
+  try {
+    const sid = parseCookies(req.headers.cookie || '').sid
+    if (sid) sessions.delete(sid)
+    setCookie(res, 'sid', '', { path:'/', httpOnly:true, maxAge:0, sameSite:'Lax' })
+    res.json({ ok:true })
+  } catch {
+    res.status(500).json({ ok:false })
   }
+})
 
-  $('prevTank').addEventListener('click', () => { nudgeTank(-1); stall($('prevTank')) })
-  $('nextTank').addEventListener('click', () => { nudgeTank(1); stall($('nextTank')) })
+app.get('/api/me', async (req, res) => {
+  const sess = requireAuth(req, res); if (!sess) return
+  const user = await readUser(sess.username)
+  if (!user) return res.status(401).json({ ok:false, error:'not_logged_in' })
+  res.json({ ok:true, username:user.username, premium:user.premium||'none', wins:user.wins||0, losses:user.losses||0, prisms:user.prisms||0 })
+})
 
-  $('btnBattle').addEventListener('click', () => {
-    $('btnBattle').disabled = true
-    setTimeout(() => { $('btnBattle').disabled = false }, 600)
-  })
+// ---------- start HTTP ----------
+app.listen(PORT, () => console.log(`HTTP listening on http://localhost:${PORT}`))
+
+// ---------- matchmaking WS (separate port 3001) ----------
+const WS_PORT = process.env.WS_PORT ? Number(process.env.WS_PORT) : 3001
+const wss = new WebSocketServer({ port: WS_PORT })
+console.log(`[WS] listening on ws://localhost:${WS_PORT}`)
+
+const queue = []
+const inGame = new Map()
+
+function send(ws, obj) { try { ws.send(JSON.stringify(obj)) } catch {} }
+function broadcastQueue() {
+  const n = queue.length
+  wss.clients.forEach(c => { if (c.readyState === 1) send(c, { type:'queueCount', n }) })
+}
+function removeFromQueue(ws) {
+  const i = queue.indexOf(ws)
+  if (i !== -1) queue.splice(i, 1)
 }
 
-/* tank nudge animation */
-function nudgeTank(dir) {
-  const card = $('tankCard')
-  card.animate(
-    [{ transform: 'scale(1)' }, { transform: 'scale(.985)' }, { transform: 'scale(1)' }],
-    { duration: 180, easing: 'ease-out' }
-  )
-  state.tankIndex = (state.tankIndex + dir + 10) % 10
-}
+wss.on('connection', ws => {
+  ws._id = randomUUID()
+  ws._status = 'idle'
 
-/* boot */
-function init() {
-  bindLanding()
-  bindModals()
-  bindMainMenu()
+  ws.on('message', raw => {
+    let msg = null
+    try { msg = JSON.parse(raw) } catch { return }
+    if (!msg) return
 
-  // auto-show main menu if already logged in (server session cookie),
-  // otherwise stay on landing. If remembered, prefill username on first open.
-  fetch('/api/me')
-    .then(r => r.ok ? r.json() : null)
-    .then(data => {
-      if (data && data.username) {
-        state.user = { username: data.username, premium: data.premium || 'none' }
-        showMainMenu()
-      } else {
-        showLanding()
+    if (msg.type === 'joinQueue') {
+      if (inGame.has(ws)) return
+      if (!queue.includes(ws)) {
+        ws._status = 'queue'
+        queue.push(ws)
+        send(ws, { type:'queued' })
+        broadcastQueue()
       }
-    })
-    .catch(() => showLanding())
-}
+      if (queue.length >= 2) {
+        const a = queue.shift()
+        const b = queue.shift()
+        broadcastQueue()
+        const players = [
+          { id: randomUUID(), ws: a },
+          { id: randomUUID(), ws: b }
+        ]
+        a._status = 'ingame'; b._status = 'ingame'
+        const game = new Game(players)
+        players.forEach(p => inGame.set(p.ws, game))
+        game.onEnd = () => {
+          players.forEach(p => inGame.delete(p.ws))
+          try { a._status = 'idle' } catch {}
+          try { b._status = 'idle' } catch {}
+        }
+      }
+    }
 
-document.addEventListener('DOMContentLoaded', init)
+    if (msg.type === 'leaveQueue') {
+      removeFromQueue(ws)
+      ws._status = 'idle'
+      broadcastQueue()
+    }
+
+    if (msg.type === 'leaveGame') {
+      const game = inGame.get(ws)
+      if (game) game.end('left')
+    }
+  })
+
+  ws.on('close', () => {
+    removeFromQueue(ws)
+    broadcastQueue()
+    const game = inGame.get(ws)
+    if (game) game.end('dc')
+  })
+
+  send(ws, { type:'hello', wsPort: WS_PORT })
+})

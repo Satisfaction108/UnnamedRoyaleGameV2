@@ -127,5 +127,21 @@
     <script id="scriptMain" src="mainmenu.js"></script>
 
     <div id="notifyStack" aria-live="polite"></div>
+
+    <!-- Queue Screen -->
+    <section id="queueScreen" hidden>
+        <div id="queueInner">
+            <h2 id="queueTitle">Matchmaking</h2>
+            <p id="queueInfo"><span id="queueCountNum">0</span> in queue</p>
+            <button id="btnQueueCancel" class="btnGhost">Cancel</button>
+        </div>
+    </section>
+
+    <!-- Game View -->
+    <section id="gameView" hidden>
+        <canvas id="gameCanvas" width="1200" height="800"></canvas>
+        <button id="btnExitGame" class="btnGhost">Exit</button>
+    </section>
+
 </body>
 </html>

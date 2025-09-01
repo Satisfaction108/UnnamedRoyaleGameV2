@@ -1,12 +1,10 @@
 {
-    "name": "unnamed-royale-accounts",
+    "name": "unnamed-royale-game",
     "version": "1.0.0",
     "type": "module",
-    "scripts": {
-        "start": "node index.js"
-    },
+    "scripts": { "start": "node index.js" },
     "dependencies": {
-        "cookie-parser": "1.4.7",
-        "express": "4.19.2"
+        "express": "^4.19.2",
+        "ws": "^8.18.0"
     }
 }

@@ -1,9 +1,22 @@
-﻿const $ = (id) => document.getElementById(id)
+﻿const $ = id => document.getElementById(id)
 
-const state = { user:null, premium:'none', tankIndex:0 }
+const state = {
+  user: null,
+  premium: 'none',
+  tankIndex: 0,
+  ws: null,
+  inQueue: false,
+  inGame: false,
+  myId: null,
+  players: [],
+  canvas: null,
+  ctx: null,
+  keys: { w:false, a:false, s:false, d:false },
+  anim: null
+}
+
 const K = { remember:'rememberMe', user:'rememberUser', pass:'rememberPass' }
 
-/* ---------- Notifications ---------- */
 function notify(msg){
   let stack = $('notifyStack')
   if(!stack){
@@ -18,7 +31,6 @@ function notify(msg){
   setTimeout(()=>{ el.classList.add('leaving'); setTimeout(()=>el.remove(),180) }, 2200)
 }
 
-/* ---------- Views ---------- */
 function showLanding(){
   $('landing').style.display = 'grid'
   $('landing').style.opacity = '1'
@@ -26,21 +38,20 @@ function showLanding(){
   $('userBadge').textContent = ''
 }
 function showMainMenu(){
+  hideQueue()
+  hideGame()
   $('landing').style.display = 'none'
   $('mainMenu').setAttribute('data-show','true')
   $('accountName').textContent = state.user?.username || ''
   $('userBadge').textContent = state.user?.username ? `@${state.user.username}` : ''
 }
 
-/* ---------- Modals ---------- */
 function openModal(id){ $('overlay').setAttribute('data-open','true'); const d=$(id); if(!d.open) d.showModal() }
 function closeModal(id){ $('overlay').removeAttribute('data-open'); const d=$(id); if(d.open) d.close() }
 
-/* ---------- Validation ---------- */
 function validateUsername(u){ return /^[a-zA-Z0-9_]{3,20}$/.test(u) }
 function validatePassword(p){ return p.length>=6 && /\d/.test(p) && /[!@#$%^&*(),.?":{}|<>]/.test(p) && /[A-Z]/.test(p) }
 
-/* ---------- Fetch helper ---------- */
 async function postJSON(path, body){
   const res = await fetch(path,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
   const type = res.headers.get('content-type') || ''
@@ -50,11 +61,11 @@ async function postJSON(path, body){
   return data
 }
 
-/* ---------- Remember me ---------- */
 function rememberChecked(){ return localStorage.getItem(K.remember)==='1' }
 function loadRememberUI(){
   const chk = $('loginRemember')
   const name = $('loginUsername')
+  if (!chk || !name) return
   chk.checked = rememberChecked()
   const u = localStorage.getItem(K.user) || ''
   if(u) name.value = u
@@ -81,7 +92,6 @@ function getRememberCreds(){
   return { on, u, p }
 }
 
-/* ---------- Bindings ---------- */
 function bindLanding(){
   $('btnSignup').addEventListener('click',()=>{
     $('signupError').textContent=''; $('signupForm').reset()
@@ -96,8 +106,8 @@ function bindModals(){
   $('loginCancel').addEventListener('click',()=>closeModal('modalLogin'))
   $('signupCancel').addEventListener('click',()=>closeModal('modalSignup'))
 
-  $('loginRemember').addEventListener('change',e=>{ setRememberFlag(e.target.checked); if(!e.target.checked){ $('loginUsername').value='' } })
-  $('loginUsername').addEventListener('input',e=>{ if(rememberChecked()) saveRememberUser(e.target.value.trim()) })
+  $('loginRemember')?.addEventListener('change',e=>{ setRememberFlag(e.target.checked); if(!e.target.checked){ $('loginUsername').value='' } })
+  $('loginUsername')?.addEventListener('input',e=>{ if(rememberChecked()) saveRememberUser(e.target.value.trim()) })
 
   $('loginForm').addEventListener('submit',async e=>{
     e.preventDefault()
@@ -110,7 +120,7 @@ function bindModals(){
       const data = await postJSON('/api/login',{ username, password })
       state.user = { username:data.username, premium:data.premium||'none' }
       state.premium = state.user.premium
-      if($('loginRemember').checked) saveRememberCreds(username,password)
+      if($('loginRemember')?.checked) saveRememberCreds(username,password)
       closeModal('modalLogin')
       showMainMenu()
       notify('Logged In!')
@@ -162,27 +172,143 @@ function bindMainMenu(){
     showLanding()
   })
 
-  const stall = (btn)=>{ btn.setAttribute('disabled','true'); setTimeout(()=>btn.removeAttribute('disabled'),180) }
+  const stall = btn => { btn.setAttribute('disabled','true'); setTimeout(()=>btn.removeAttribute('disabled'),180) }
   $('prevTank').addEventListener('click',()=>{ nudgeTank(-1); stall($('prevTank')) })
   $('nextTank').addEventListener('click',()=>{ nudgeTank(1); stall($('nextTank')) })
 
   $('btnBattle').addEventListener('click',()=>{
+    if(!state.user){ notify('Log in first'); return }
+    ensureSocket()
+    showQueue()
+    sendWS({ type:'joinQueue' })
     $('btnBattle').disabled = true
     setTimeout(()=>{ $('btnBattle').disabled=false },600)
   })
+
+  $('btnQueueCancel').addEventListener('click',()=>{
+    sendWS({ type:'leaveQueue' })
+    hideQueue()
+  })
+
+  $('btnExitGame').addEventListener('click',()=>{
+    sendWS({ type:'leaveGame' })
+    stopGame()
+    showMainMenu()
+  })
 }
 
-/* ---------- Tank selector ---------- */
 function nudgeTank(dir){
   const card = $('tankCard')
   card.animate([{transform:'scale(1)'},{transform:'scale(.985)'},{transform:'scale(1)'}],{ duration:180, easing:'ease-out' })
   state.tankIndex = (state.tankIndex + dir + 10) % 10
 }
 
-/* ---------- Boot ---------- */
+/* Queue UI */
+function showQueue(){
+  $('queueScreen').hidden = false
+  $('queueCountNum').textContent = '1'
+}
+function hideQueue(){ $('queueScreen').hidden = true }
+
+/* Game UI */
+function showGame(){
+  $('gameView').hidden = false
+  $('mainMenu').removeAttribute('data-show')
+}
+function hideGame(){ $('gameView').hidden = true }
+
+/* WS */
+function ensureSocket(){
+  if (state.ws && state.ws.readyState === 1) return
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const host = location.hostname
+  const port = 3001
+  const url = `${proto}://${host}:${port}`
+  const ws = new WebSocket(url)
+  state.ws = ws
+  ws.onopen = () => {}
+  ws.onclose = () => {}
+  ws.onmessage = ev => {
+    let m = null
+    try { m = JSON.parse(ev.data) } catch { return }
+    if (!m) return
+    if (m.type === 'hello') {}
+    if (m.type === 'queueCount') $('queueCountNum').textContent = String(m.n)
+    if (m.type === 'queued') {}
+    if (m.type === 'matchStart') {
+      state.inQueue = false
+      state.inGame = true
+      state.myId = m.you
+      startGame(m.w, m.h)
+    }
+    if (m.type === 'state') {
+      state.players = m.players || []
+    }
+    if (m.type === 'matchEnd') {
+      stopGame()
+      hideGame()
+      showMainMenu()
+      notify('Match ended')
+    }
+  }
+}
+function sendWS(obj){
+  if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(obj))
+}
+
+/* Game client */
+function startGame(w, h){
+  hideQueue()
+  showGame()
+  state.canvas = $('gameCanvas')
+  state.ctx = state.canvas.getContext('2d')
+  state.canvas.width = w
+  state.canvas.height = h
+  window.addEventListener('keydown', onKey, { passive:false })
+  window.addEventListener('keyup', onKey, { passive:false })
+  loop()
+}
+function stopGame(){
+  state.inGame = false
+  try { cancelAnimationFrame(state.anim) } catch {}
+  window.removeEventListener('keydown', onKey)
+  window.removeEventListener('keyup', onKey)
+  state.players = []
+}
+function onKey(e){
+  const k = e.key.toLowerCase()
+  if (['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright'].includes(k)) e.preventDefault()
+  let changed = false
+  if (e.type === 'keydown') {
+    if (k==='w'||k==='arrowup') { if(!state.keys.w){ state.keys.w=true; changed=true } }
+    if (k==='a'||k==='arrowleft') { if(!state.keys.a){ state.keys.a=true; changed=true } }
+    if (k==='s'||k==='arrowdown') { if(!state.keys.s){ state.keys.s=true; changed=true } }
+    if (k==='d'||k==='arrowright') { if(!state.keys.d){ state.keys.d=true; changed=true } }
+  } else {
+    if (k==='w'||k==='arrowup') { if(state.keys.w){ state.keys.w=false; changed=true } }
+    if (k==='a'||k==='arrowleft') { if(state.keys.a){ state.keys.a=false; changed=true } }
+    if (k==='s'||k==='arrowdown') { if(state.keys.s){ state.keys.s=false; changed=true } }
+    if (k==='d'||k==='arrowright') { if(state.keys.d){ state.keys.d=false; changed=true } }
+  }
+  if (changed) sendWS({ type:'input', ...state.keys })
+}
+function loop(){
+  if (!state.inGame) return
+  const ctx = state.ctx, c = state.canvas
+  ctx.clearRect(0,0,c.width,c.height)
+  ctx.fillStyle = '#0ea5e9'
+  state.players.forEach(p=>{
+    const r = 14
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, r, 0, Math.PI*2)
+    ctx.fill()
+  })
+  state.anim = requestAnimationFrame(loop)
+}
+
+/* Boot */
 async function boot(){
   bindLanding(); bindModals(); bindMainMenu()
-
   try{
     const res = await fetch('/api/me')
     if(res.ok){
@@ -194,7 +320,6 @@ async function boot(){
       }
     }
   }catch(e){}
-
   const { on, u, p } = getRememberCreds()
   if(on && u && p){
     try{
@@ -206,8 +331,6 @@ async function boot(){
       return
     }catch(e){}
   }
-
   showLanding()
 }
-
 document.addEventListener('DOMContentLoaded', boot)

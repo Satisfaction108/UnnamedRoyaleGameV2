@@ -958,3 +958,60 @@ h2#loginTitle, h2#signupTitle {
         right: -56px !important;
     }
 }
+#queueScreen, #gameView {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 20;
+}
+
+    #queueScreen[hidden], #gameView[hidden] {
+        display: none
+    }
+
+#queueInner {
+    width: min(420px, 92vw);
+    padding: 28px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
+    border: 1px solid rgba(255,255,255,.14);
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+
+#queueTitle {
+    margin: 0 0 8px 0
+}
+
+#queueInfo {
+    margin: 6px 0 14px 0;
+    color: var(--muted)
+}
+
+#queueCountNum {
+    font-weight: 800;
+    color: var(--green)
+}
+
+#gameView {
+    background: #fff;
+    align-items: start;
+    padding: 16px;
+}
+
+#gameCanvas {
+    background: #fff;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.15);
+}
+
+#btnExitGame {
+    position: fixed;
+    right: 16px;
+    top: 16px;
+    background: #111827;
+    color: #e5e7eb;
+    border: 1px solid rgba(255,255,255,.16);
+}
