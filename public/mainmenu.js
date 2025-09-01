@@ -224,12 +224,18 @@ function ensureSocket(){
   const url = `${proto}://${location.host}/ws`
   const ws = new WebSocket(url)
   state.ws = ws
-  ws.onopen = () => {
-    const buf = state.wsBuffer.splice(0)
-    for (const m of buf) try { ws.send(JSON.stringify(m)) } catch {}
-  }
-  ws.onclose = () => {}
-  ws.onmessage = ev => {
+ws.onopen = () => {
+  const buf = state.wsBuffer.splice(0)
+  for (const m of buf) try { ws.send(JSON.stringify(m)) } catch {}
+}
+
+ws.onerror = () => {
+  notify('Can’t connect to server. Is it running?')
+}
+
+ws.onclose = () => {}
+
+ws.onmessage = ev => {
     let m = null
     try { m = JSON.parse(ev.data) } catch { return }
     if (!m) return

@@ -107,7 +107,8 @@ app.get('/api/me', async (req, res) => {
 
 const server = app.listen(PORT, () => console.log(`HTTP listening on http://localhost:${PORT}`))
 
-const wss = new WebSocketServer({ noServer: true })
+// Attach directly to the HTTP server on /ws (simpler & more robust)
+const wss = new WebSocketServer({ server, path: '/ws' })
 const queue = []
 const inGame = new Map()
 
@@ -174,14 +175,4 @@ wss.on('connection', ws => {
     const game = inGame.get(ws)
     if (game) game.end('dc')
   })
-})
-
-server.on('upgrade', (req, socket, head) => {
-  if (req.url === '/ws') {
-    wss.handleUpgrade(req, socket, head, ws => {
-      wss.emit('connection', ws, req)
-    })
-  } else {
-    socket.destroy()
-  }
 })

@@ -635,3 +635,27 @@ h2#loginTitle, h2#signupTitle {
     color: #e5e7eb;
     border: 1px solid rgba(255,255,255,.16)
 }
+/* Split so we can give different stacking & a blurred overlay to the queue */
+#queueScreen,
+#gameView {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+}
+
+#queueScreen {
+    z-index: 2000; /* above everything */
+    background: rgba(8, 10, 14, 0.70); /* 70% dark */
+    backdrop-filter: blur(10px) saturate(1.05);
+    -webkit-backdrop-filter: blur(10px) saturate(1.05);
+}
+
+#gameView {
+    z-index: 100; /* game still above base UI */
+}
+
+    #queueScreen[hidden],
+    #gameView[hidden] {
+        display: none;
+    }
