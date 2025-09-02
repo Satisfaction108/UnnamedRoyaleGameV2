@@ -105,9 +105,31 @@ app.get('/api/me', async (req, res) => {
   res.json({ ok:true, username:user.username, premium:user.premium||'none', wins:user.wins||0, losses:user.losses||0, prisms:user.prisms||0 })
 })
 
+// change password for the logged-in user
+app.post('/api/password', async (req, res) => {
+  const sess = requireAuth(req, res); if (!sess) return
+  try {
+    const { currentPassword, newPassword } = req.body || {}
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+      return res.status(400).json({ ok:false, error:'invalid_input' })
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ ok:false, error:'invalid_password' })
+    }
+    const user = await readUser(sess.username)
+    if (!user) return res.status(401).json({ ok:false, error:'not_logged_in' })
+    if (user.password !== currentPassword) return res.status(401).json({ ok:false, error:'bad_credentials' })
+    user.password = newPassword
+    await writeUser(user.username, user)
+    res.json({ ok:true })
+  } catch {
+    res.status(500).json({ ok:false, error:'password_change_failed' })
+  }
+})
+
 const server = app.listen(PORT, () => console.log(`HTTP listening on http://localhost:${PORT}`))
 
-// Attach directly to the HTTP server on /ws (simpler & more robust)
+// attach directly to the http server on /ws (simpler & more robust)
 const wss = new WebSocketServer({ server, path: '/ws' })
 const queue = []
 const inGame = new Map()

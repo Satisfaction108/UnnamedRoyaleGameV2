@@ -27,6 +27,9 @@ body {
     background: var(--bg);
     color: var(--text);
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     overflow: hidden
 }
 
@@ -116,7 +119,9 @@ body {
     transform: translateZ(0);
     transition: transform var(--speed) cubic-bezier(.18,.8,.22,1), box-shadow var(--speed), background var(--speed), opacity var(--speed);
     box-shadow: var(--shadow);
-    will-change: transform, box-shadow, background
+    will-change: transform, box-shadow, background;
+    position: relative;
+    overflow: hidden
 }
 
 .btnPrimary {
@@ -176,8 +181,10 @@ body {
 #overlay {
     position: fixed;
     inset: 0;
-    background: rgba(8,10,14,0.65);
-    backdrop-filter: blur(2px);
+    background: rgba(8,10,14,0.78);
+    backdrop-filter: blur(12px) saturate(1.05);
+    -webkit-backdrop-filter: blur(12px) saturate(1.05);
+    z-index: 1000;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--speed)
@@ -189,10 +196,12 @@ body {
     }
 
 dialog {
-    width: min(52rem, 92dvw);
+    width: min(36rem, 92dvw);
     border: none;
     padding: 0;
-    background: transparent
+    background: transparent;
+    color: var(--text);
+    z-index: 1001
 }
 
     dialog[open] {
@@ -200,13 +209,25 @@ dialog {
         place-items: center
     }
 
+dialog::backdrop {
+    /* dim and blur the page behind native dialog overlay */
+    background: rgba(8,10,14,0.65);
+    backdrop-filter: blur(12px) saturate(1.05);
+    -webkit-backdrop-filter: blur(12px) saturate(1.05)
+}
+
 #modalLoginInner, #modalSignupInner {
     width: 100%;
-    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    background:
+        linear-gradient(180deg, rgba(138,92,255,0.18), rgba(0,231,255,0.10) 48%, rgba(255,61,113,0.14)),
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.16);
     border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: calc(2.6 * var(--u)) calc(2.6 * var(--u)) calc(1.8 * var(--u)) calc(2.6 * var(--u));
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35), 0 0 0 1px rgba(138,92,255,0.20) inset;
+    color: var(--text);
+    padding: calc(2.2 * var(--u)) calc(2.2 * var(--u)) calc(1.6 * var(--u)) calc(2.2 * var(--u));
     animation: modalIn 320ms cubic-bezier(.18,.8,.22,1) both
 }
 
@@ -225,7 +246,12 @@ dialog {
 h2#loginTitle, h2#signupTitle {
     margin: 0 0 calc(1.4 * var(--u)) 0;
     font-size: clamp(20px, 2.2dvw, 24px);
-    letter-spacing: .3px
+    letter-spacing: .3px;
+    /* subtle gradient text for futuristic look */
+    background: linear-gradient(90deg, var(--text), #cfe0ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent
 }
 
 .fieldRow {
@@ -240,20 +266,43 @@ h2#loginTitle, h2#signupTitle {
     }
 
     .fieldRow input {
-        height: calc(4.6 * var(--u));
-        border-radius: calc(1.2 * var(--u));
+        height: calc(4.0 * var(--u));
+        border-radius: calc(1.1 * var(--u));
         background: rgba(255,255,255,0.06);
-        border: 1px solid rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.10);
         color: var(--text);
-        padding: 0 calc(1.4 * var(--u));
+        padding: 0 calc(1.2 * var(--u));
         outline: none;
         transition: border var(--speed), box-shadow var(--speed)
+    }
+
+    .fieldRow input::placeholder {
+        color: #cbd5e1;
+        opacity: .85
     }
 
         .fieldRow input:focus {
             border: 1px solid #6aa8ff;
             box-shadow: 0 0 0 calc(.6 * var(--u)) rgba(85,140,255,0.15)
         }
+
+/* stronger focus ring for keyboard users */
+.btnPrimary:focus-visible,
+.btnSecondary:focus-visible,
+.btnTertiary:focus-visible,
+.btnGhost:focus-visible,
+.btnBattle:focus-visible,
+input:focus-visible,
+button:focus-visible {
+    outline: 2px solid #6aa8ff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 calc(.6 * var(--u)) rgba(85,140,255,0.12)
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: .7
+}
 
 .rememberRow {
     display: flex;
@@ -299,10 +348,7 @@ h2#loginTitle, h2#signupTitle {
     }
 
 .formError {
-    min-height: 20px;
-    color: #ff8a8a;
-    font-size: 13px;
-    margin-top: calc(.8 * var(--u))
+    display: none; /* Hide inline errors; we show friendly modal messages instead */
 }
 
 #mainMenu {
@@ -330,19 +376,7 @@ h2#loginTitle, h2#signupTitle {
     padding: 0 calc(2.2 * var(--u))
 }
 
-#brandMini {
-    justify-self: start;
-    width: calc(5.6 * var(--u));
-    height: calc(4 * var(--u));
-    display: grid;
-    place-items: center;
-    background: linear-gradient(135deg, #202636, #1a2130);
-    border: 1px solid rgba(255,255,255,0.08);
-    color: #cfe0ff;
-    border-radius: calc(1 * var(--u));
-    box-shadow: var(--shadow);
-    font-weight: 800
-}
+#brandMini { display: none !important; }
 
 .btnBattle {
     justify-self: center;
@@ -372,12 +406,12 @@ h2#loginTitle, h2#signupTitle {
     position: absolute;
     inset: calc(10 * var(--u)) calc(2.8 * var(--u)) calc(2.8 * var(--u)) calc(2.8 * var(--u));
     display: grid;
-    grid-template-columns: clamp(22rem, 24dvw, 30rem) 1fr;
+    grid-template-columns: 1fr;
     gap: calc(2.2 * var(--u))
 }
 
 #accountPanel {
-    align-self: start
+    display: none !important; /* Remove redundant account UI from home screen */
 }
 
 #accountCard {
@@ -635,7 +669,7 @@ h2#loginTitle, h2#signupTitle {
     color: #e5e7eb;
     border: 1px solid rgba(255,255,255,.16)
 }
-/* Split so we can give different stacking & a blurred overlay to the queue */
+/* split stacking and apply blurred overlay for queue */
 #queueScreen,
 #gameView {
     position: fixed;
@@ -652,7 +686,7 @@ h2#loginTitle, h2#signupTitle {
 }
 
 #gameView {
-    z-index: 100; /* game still above base UI */
+    z-index: 100; /* game still above base ui */
 }
 
     #queueScreen[hidden],
@@ -663,6 +697,13 @@ h2#loginTitle, h2#signupTitle {
     background: #000;
     align-items: stretch;
     padding: 0;
+}
+
+/* respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important }
+    #bgGrid { animation: none !important }
+    .notify { animation: none !important }
 }
 
 #gameCanvas {
@@ -686,3 +727,144 @@ h2#loginTitle, h2#signupTitle {
     border: 1px solid rgba(255,255,255,.16);
     z-index: 5;
 }
+
+/* --- Top-left action icons --- */
+#topLeftActions {
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: calc(.8 * var(--u));
+}
+
+/* Explicit grid placement to keep layout stable */
+#topLeftActions { grid-column: 1; }
+#topBar .btnBattle { grid-column: 2; }
+#userBadge { grid-column: 3; }
+
+.iconBtn {
+    appearance: none;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: linear-gradient(135deg, #1a2233, #151b28);
+    color: #cfe0ff;
+    width: calc(4.4 * var(--u));
+    height: calc(4.4 * var(--u));
+    border-radius: calc(1.1 * var(--u));
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: transform var(--speed), background var(--speed), border-color var(--speed), color var(--speed);
+    text-decoration: none;
+}
+
+.iconBtn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #222b3f, #1a2130);
+    border-color: rgba(255,255,255,0.24);
+    color: #fff;
+}
+
+.iconBtn:active { transform: translateY(0); }
+
+.btnPrimary.small, .btnSecondary.small, .btnGhost.small, .btnTertiary.small {
+    padding: calc(1.0 * var(--u)) calc(1.4 * var(--u));
+    font-size: 14px;
+    border-radius: calc(.9 * var(--u));
+}
+
+.muted { color: var(--muted); }
+
+/* --- Settings Drawer --- */
+#settingsDrawer {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    pointer-events: none;
+}
+
+#settingsDrawer #drawerBackdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(8,10,14,0.6);
+    backdrop-filter: blur(8px) saturate(1.05);
+    -webkit-backdrop-filter: blur(8px) saturate(1.05);
+    opacity: 0;
+    transition: opacity var(--speed);
+    pointer-events: none;
+}
+
+#settingsDrawer #drawerPanel {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: min(34rem, 86dvw);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    border-right: 1px solid rgba(255,255,255,0.12);
+    box-shadow: var(--shadow);
+    transform: translateX(-102%);
+    transition: transform var(--speed) cubic-bezier(.18,.8,.22,1);
+    padding: calc(1.6 * var(--u));
+}
+
+#settingsDrawer[data-open="true"] { pointer-events: auto; }
+#settingsDrawer[data-open="true"] #drawerBackdrop { opacity: 1; pointer-events: auto; }
+#settingsDrawer[data-open="true"] #drawerPanel { transform: translateX(0); }
+
+#drawerHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: calc(1 * var(--u));
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+#drawerTitle { font-weight: 800; letter-spacing: .3px; }
+
+#drawerTabs { display: flex; gap: calc(.8 * var(--u)); margin: calc(1.2 * var(--u)) 0; }
+.tab {
+    appearance: none;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.04);
+    color: #e7efff;
+    padding: calc(.8 * var(--u)) calc(1.2 * var(--u));
+    border-radius: calc(.9 * var(--u));
+    cursor: pointer;
+    transition: background var(--speed), border-color var(--speed), color var(--speed);
+}
+.tab.active, .tab[aria-selected="true"] {
+    background: linear-gradient(135deg, #2e3a5a, #3d4f7b);
+    border-color: rgba(255,255,255,0.24);
+    color: #fff;
+}
+
+#drawerPanels { overflow: auto; max-height: calc(100% - 120px); }
+.kv { display: flex; justify-content: space-between; align-items: center; margin: calc(.8 * var(--u)) 0; }
+.kv .k { color: var(--muted); }
+.kv .v { font-weight: 700; }
+.passwordRow .v { display: inline-flex; align-items: center; gap: calc(.6 * var(--u)); }
+.actionsRow { margin-top: calc(1.2 * var(--u)); display: flex; gap: calc(.8 * var(--u)); }
+.statsBlock { margin-top: calc(1.4 * var(--u)); display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(.8 * var(--u)); }
+.statsBlock .stat { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: calc(.9 * var(--u)); padding: calc(1 * var(--u)); text-align: center; }
+
+/* --- Generic Modal Boxes (Error/Success/Changelog) --- */
+.modalBox {
+    width: 100%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    padding: calc(2 * var(--u));
+}
+
+.modalBox.success { background: linear-gradient(180deg, rgba(56,242,165,0.18), rgba(0,231,255,0.10)); border-color: rgba(56,242,165,0.35); }
+.modalBox.error { background: linear-gradient(180deg, rgba(255,61,113,0.22), rgba(255,140,140,0.10)); border-color: rgba(255,61,113,0.35); }
+
+/* Modal actions row */
+.modalActions {
+    margin-top: calc(1.2 * var(--u));
+    display: flex;
+    gap: calc(.8 * var(--u));
+    justify-content: flex-end;
+}
+
