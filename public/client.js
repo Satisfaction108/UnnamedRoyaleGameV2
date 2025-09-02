@@ -8,6 +8,14 @@
   const CAM_SMOOTH = 0.2
   const STROKE_W = 4
 
+  // spectator tuning
+  const SPEC_PAN_PX_PER_S = 1000       // panning speed in screen px/s
+  const ZOOM_MIN = 0.5
+  const ZOOM_MAX = 3.0
+  const ZOOM_SMOOTH = 0.22             // smoothing for zoom easing
+  const ZOOM_STEP_KEYS = 1.12          // +/- keys scale per press
+  const ZOOM_WHEEL_BASE = 1.0015       // wheel scaling base (applied to deltaY)
+
   let ws = null
   let canvas = null
   let ctx = null
@@ -21,6 +29,7 @@
   let dpr = Math.min(window.devicePixelRatio || 1, 3)
   let viewW = 0, viewH = 0
 
+  // movement keys sent to server (when alive)
   let keys = { w: false, a: false, s: false, d: false }
 
   // snapshots
@@ -31,8 +40,14 @@
   const names = new Map()   // id -> username
   const tanks = new Map()   // id -> { name, shape, size, barrels }
 
-  // camera
+  // camera & zoom
   const camera = { x: 0, y: 0 }
+  let zoom = 1
+  let targetZoom = 1
+
+  // spectator state
+  let isSpectator = false
+  const specKeys = { up: false, left: false, down: false, right: false }
 
   // UI
   let announceText = null
@@ -40,13 +55,13 @@
   let exitCountdownSecs = 0
   let exitCountdownStart = 0
 
-  // death overlay
-  let lastAlive = true
-
   // mouse aim
   let mouseCssX = 0, mouseCssY = 0
   let lastAimSent = 0
   let lastAngleSent = 0
+
+  // frame timing
+  let lastFrameTs = 0
 
   function start(m) {
     ws = window.__wsRef
@@ -73,15 +88,18 @@
     window.addEventListener('keydown', onKey, { passive: false })
     window.addEventListener('keyup', onKey, { passive: false })
     window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('wheel', onWheel, { passive: false }) // wheel zoom
 
     running = true
+    lastFrameTs = performance.now()
     anim = requestAnimationFrame(loop)
 
     announceText = null
     announceUntil = 0
     exitCountdownSecs = 0
     exitCountdownStart = 0
-    lastAlive = true
+    isSpectator = false
+    zoom = targetZoom = 1
   }
 
   function stop() {
@@ -91,6 +109,7 @@
     window.removeEventListener('keyup', onKey)
     window.removeEventListener('resize', onResize)
     window.removeEventListener('pointermove', onPointerMove)
+    window.removeEventListener('wheel', onWheel)
     $('gameView') && ($('gameView').hidden = true)
     snapshots.length = 0
     names.clear()
@@ -121,7 +140,15 @@
       if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
 
       const me = map.get(myId)
-      lastAlive = !!me?.alive
+      const newSpectator = me ? !me.alive : true
+      if (newSpectator !== isSpectator) {
+        isSpectator = newSpectator
+        if (!isSpectator) {
+          // back alive: restore default view
+          targetZoom = zoom = 1
+          specKeys.up = specKeys.left = specKeys.down = specKeys.right = false
+        }
+      }
       return true
     }
 
@@ -144,27 +171,59 @@
   /* ====== input ====== */
   function onKey(e) {
     const k = e.key.toLowerCase()
-    if (['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright',' '].includes(k)) e.preventDefault()
-    let changed = false
+    const isMoveKey = ['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright'].includes(k)
+    const isZoomKey = k === '-' || k === '_' || k === '+' || k === '='
+
+    if (isMoveKey || (isSpectator && isZoomKey)) e.preventDefault()
+
     if (e.type === 'keydown') {
-      if (k === 'w' || k === 'arrowup') { if (!keys.w) { keys.w = true; changed = true } }
-      if (k === 'a' || k === 'arrowleft') { if (!keys.a) { keys.a = true; changed = true } }
-      if (k === 's' || k === 'arrowdown') { if (!keys.s) { keys.s = true; changed = true } }
-      if (k === 'd' || k === 'arrowright') { if (!keys.d) { keys.d = true; changed = true } }
+      if (isSpectator) {
+        // spectator camera control
+        if (k === 'w' || k === 'arrowup') specKeys.up = true
+        if (k === 'a' || k === 'arrowleft') specKeys.left = true
+        if (k === 's' || k === 'arrowdown') specKeys.down = true
+        if (k === 'd' || k === 'arrowright') specKeys.right = true
+
+        if (isZoomKey) {
+          if (k === '-' || k === '_') targetZoom = clamp(targetZoom / ZOOM_STEP_KEYS, ZOOM_MIN, ZOOM_MAX)
+          if (k === '+' || k === '=') targetZoom = clamp(targetZoom * ZOOM_STEP_KEYS, ZOOM_MIN, ZOOM_MAX)
+        }
+      } else {
+        // alive: send movement to server (unchanged)
+        let changed = false
+        if (k === 'w' || k === 'arrowup') { if (!keys.w) { keys.w = true; changed = true } }
+        if (k === 'a' || k === 'arrowleft') { if (!keys.a) { keys.a = true; changed = true } }
+        if (k === 's' || k === 'arrowdown') { if (!keys.s) { keys.s = true; changed = true } }
+        if (k === 'd' || k === 'arrowright') { if (!keys.d) { keys.d = true; changed = true } }
+        if (changed && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'input', ...keys }))
+      }
     } else {
-      if (k === 'w' || k === 'arrowup') { if (keys.w) { keys.w = false; changed = true } }
-      if (k === 'a' || k === 'arrowleft') { if (keys.a) { keys.a = false; changed = true } }
-      if (k === 's' || k === 'arrowdown') { if (keys.s) { keys.s = false; changed = true } }
-      if (k === 'd' || k === 'arrowright') { if (keys.d) { keys.d = false; changed = true } }
-    }
-    if (changed && ws && ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'input', ...keys }))
+      if (isSpectator) {
+        if (k === 'w' || k === 'arrowup') specKeys.up = false
+        if (k === 'a' || k === 'arrowleft') specKeys.left = false
+        if (k === 's' || k === 'arrowdown') specKeys.down = false
+        if (k === 'd' || k === 'arrowright') specKeys.right = false
+      } else {
+        let changed = false
+        if (k === 'w' || k === 'arrowup') { if (keys.w) { keys.w = false; changed = true } }
+        if (k === 'a' || k === 'arrowleft') { if (keys.a) { keys.a = false; changed = true } }
+        if (k === 's' || k === 'arrowdown') { if (keys.s) { keys.s = false; changed = true } }
+        if (k === 'd' || k === 'arrowright') { if (keys.d) { keys.d = false; changed = true } }
+        if (changed && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'input', ...keys }))
+      }
     }
   }
 
   function onPointerMove(e) {
     mouseCssX = e.clientX
     mouseCssY = e.clientY
+  }
+
+  function onWheel(e) {
+    if (!isSpectator) return
+    e.preventDefault()
+    const factor = Math.pow(ZOOM_WHEEL_BASE, e.deltaY)
+    targetZoom = clamp(targetZoom * factor, ZOOM_MIN, ZOOM_MAX)
   }
 
   /* ====== HiDPI ====== */
@@ -218,18 +277,40 @@
   }
 
   /* ====== render loop ====== */
-  function loop() {
+  function loop(now) {
     if (!running) return
+    const dt = Math.max(0.001, (now - lastFrameTs) / 1000)
+    lastFrameTs = now
+
+    // zoom easing
+    zoom += (targetZoom - zoom) * ZOOM_SMOOTH
+    if (!isSpectator) zoom = targetZoom = 1 // keep gameplay exactly as before
 
     const renderServerTime = Date.now() - serverOffset - INTERP_DELAY_MS
     const players = getInterpolated(renderServerTime)
 
     const me = players.find(p => p.id === myId)
-    if (me) {
+
+    if (isSpectator) {
+      // WASD pans in screen pixels -> convert to world units by dividing by zoom
+      const vx = (specKeys.right ? 1 : 0) - (specKeys.left ? 1 : 0)
+      const vy = (specKeys.down ? 1 : 0) - (specKeys.up ? 1 : 0)
+      let len = Math.hypot(vx, vy)
+      if (len > 0) {
+        const inv = 1 / len
+        camera.x += (vx * SPEC_PAN_PX_PER_S * inv) * dt / zoom
+        camera.y += (vy * SPEC_PAN_PX_PER_S * inv) * dt / zoom
+      }
+    } else if (me) {
+      // follow player smoothly (unchanged)
       camera.x += (me.x - camera.x) * CAM_SMOOTH
       camera.y += (me.y - camera.y) * CAM_SMOOTH
-      maybeSendAim(me)
+      maybeSendAim(me) // only send aim while alive
     }
+
+    // clamp camera CENTER to world border (no viewport-margin clamp)
+    camera.x = clamp(camera.x, 0, world.w)
+    camera.y = clamp(camera.y, 0, world.h)
 
     ctx.clearRect(0, 0, viewW, viewH)
     drawWorld()
@@ -241,11 +322,11 @@
     anim = requestAnimationFrame(loop)
   }
 
-  /* ====== aim sending (throttled) ====== */
+  /* ====== aim sending (only when alive) ====== */
   function maybeSendAim(me) {
-    // mouse in world space
-    const wx = camera.x - viewW / 2 + mouseCssX
-    const wy = camera.y - viewH / 2 + mouseCssY
+    // mouse in world space (zoom-aware)
+    const wx = camera.x - (viewW / 2) / zoom + mouseCssX / zoom
+    const wy = camera.y - (viewH / 2) / zoom + mouseCssY / zoom
     const angle = Math.atan2(wy - me.y, wx - me.x)
 
     const now = performance.now()
@@ -311,7 +392,8 @@
       const tank = tanks.get(p.id)
       const x = worldToScreenX(p.x)
       const y = worldToScreenY(p.y)
-      const r = Math.max(8, p.size || tank?.size || 16)
+      const rWorld = Math.max(8, p.size || tank?.size || 16)
+      const r = rWorld * zoom
 
       // COLORS
       const fill = !p.alive ? '#4b5563' : (p.id === myId ? '#34d399' : '#60a5fa')
@@ -324,7 +406,7 @@
         ctx.strokeStyle = '#4b5563' // darker grey
         for (const b of tank.barrels) {
           const [len, wid, fwd, side, dir] = b
-          drawBarrelRot(x, y, len, wid, fwd, side, (p.rot || 0) + dir)
+          drawBarrelRot(x, y, len * zoom, wid * zoom, fwd * zoom, side * zoom, (p.rot || 0) + dir)
         }
       }
 
@@ -462,8 +544,11 @@
     const num = parseInt(hex, 16)
     return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 }
   }
-  function worldToScreenX(wx) { return Math.floor(wx - camera.x + viewW / 2) }
-  function worldToScreenY(wy) { return Math.floor(wy - camera.y + viewH / 2) }
+
+  // zoom-aware transforms
+  function worldToScreenX(wx) { return Math.floor((wx - camera.x) * zoom + viewW / 2) }
+  function worldToScreenY(wy) { return Math.floor((wy - camera.y) * zoom + viewH / 2) }
+
   function lerpAngle(a, b, t) {
     const two = Math.PI * 2
     let diff = ((b - a + Math.PI) % (two)) - Math.PI
@@ -474,6 +559,7 @@
     let d = ((a - b + Math.PI) % two) - Math.PI
     return d
   }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 
   function onExitClick() {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'leaveGame' }))
@@ -485,4 +571,4 @@
 })()
 
 window.GameClient = GameClient
-console.log('[Client] GameClient ready (hi-res + rotation + barrel-underlay)')
+console.log('[Client] GameClient ready (hi-res + rotation + barrel-underlay + spectator cam center-clamp)')
