@@ -1,9 +1,5 @@
-<<<<<<< Updated upstream
 ﻿import { randomUUID } from 'node:crypto'
 import TANK_DEFS from './tankdefs.js'
-=======
-import { randomUUID } from 'node:crypto'
->>>>>>> Stashed changes
 
 export default class Game {
   constructor(players) {
@@ -26,12 +22,7 @@ export default class Game {
       name: p.name || `P-${String(p.id).slice(0, 4)}`,
     }))
 
-<<<<<<< Updated upstream
     const tankKeys = Object.keys(TANK_DEFS)
-=======
-    // build roster once
-    const roster = players.map(p => ({ id: p.id, name: p.name || `P-${String(p.id).slice(0,4)}` }))
->>>>>>> Stashed changes
 
     // initialize players
     players.forEach((p, i) => {
