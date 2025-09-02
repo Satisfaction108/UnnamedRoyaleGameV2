@@ -1,9 +1,7 @@
 ﻿const GameClient = (() => {
   const $ = (id) => document.getElementById(id)
 
-  const RENDER_W = 1600
-  const RENDER_H = 900
-
+  // Interp / camera tuning
   const INTERP_DELAY_MS = 120
   const MAX_SNAPSHOTS = 90
   const OFFSET_SMOOTH = 0.12
@@ -18,13 +16,18 @@
   let myId = null
   let world = { w: 2000, h: 2000 }
 
+  // High-res sizing
+  let dpr = Math.min(window.devicePixelRatio || 1, 3)
+  let viewW = 0
+  let viewH = 0
+
   let keys = { w: false, a: false, s: false, d: false }
 
   // snapshots for interpolation
   const snapshots = []
   let serverOffset = 0
 
-  // names: id -> username
+  // id -> username
   const names = new Map()
 
   const camera = { x: 0, y: 0 }
@@ -52,10 +55,10 @@
 
     canvas = $('gameCanvas')
     ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
-    canvas.width = RENDER_W
-    canvas.height = RENDER_H
-    canvas.style.width = '100vw'
-    canvas.style.height = '100vh'
+
+    // High-res init + listeners
+    resizeCanvas()
+    window.addEventListener('resize', onResize, { passive: true })
 
     $('queueScreen') && ($('queueScreen').hidden = true)
     $('gameView') && ($('gameView').hidden = false)
@@ -80,6 +83,7 @@
     try { cancelAnimationFrame(anim) } catch {}
     window.removeEventListener('keydown', onKey)
     window.removeEventListener('keyup', onKey)
+    window.removeEventListener('resize', onResize)
     $('gameView') && ($('gameView').hidden = true)
     snapshots.length = 0
     names.clear()
@@ -142,6 +146,35 @@
     return false
   }
 
+  // ===== High-res canvas helpers =====
+  function onResize() {
+    const newDpr = Math.min(window.devicePixelRatio || 1, 3)
+    if (newDpr !== dpr) dpr = newDpr
+    resizeCanvas()
+  }
+
+  function resizeCanvas() {
+    // CSS size in layout pixels
+    const cssW = window.innerWidth
+    const cssH = window.innerHeight
+
+    // Backing store in device pixels
+    canvas.width = Math.max(1, Math.round(cssW * dpr))
+    canvas.height = Math.max(1, Math.round(cssH * dpr))
+
+    // Display size (kept separate; we draw in CSS px)
+    canvas.style.width = cssW + 'px'
+    canvas.style.height = cssH + 'px'
+
+    // Normalize drawing space so 1 unit = 1 CSS pixel
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.imageSmoothingEnabled = true
+
+    viewW = cssW
+    viewH = cssH
+  }
+
+  // ===== Input =====
   function onKey(e) {
     const k = e.key.toLowerCase()
     if (['w', 'a', 's', 'd', 'arrowup', 'arrowleft', 'arrowdown', 'arrowright', ' '].includes(k))
@@ -162,6 +195,7 @@
       ws.send(JSON.stringify({ type: 'input', ...keys }))
   }
 
+  // ===== Interpolation =====
   function getInterpolated(renderServerTime) {
     if (snapshots.length === 0) return []
     if (snapshots.length === 1) {
@@ -194,6 +228,7 @@
     return out
   }
 
+  // ===== Render loop =====
   function loop() {
     if (!running) return
 
@@ -206,11 +241,9 @@
       camera.y += (me.y - camera.y) * CAM_SMOOTH
     }
 
-    ctx.clearRect(0, 0, RENDER_W, RENDER_H)
+    ctx.clearRect(0, 0, viewW, viewH)
     drawWorld()
-
     drawPlayers(players)
-
     drawAnnouncements()
     drawExitCountdown()
     drawDeathOverlay(me)
@@ -218,9 +251,11 @@
     anim = requestAnimationFrame(loop)
   }
 
+  // ===== Drawing =====
   function drawWorld() {
+    // background
     ctx.fillStyle = '#05080f'
-    ctx.fillRect(0, 0, RENDER_W, RENDER_H)
+    ctx.fillRect(0, 0, viewW, viewH)
 
     const left = worldToScreenX(0)
     const top = worldToScreenY(0)
@@ -234,7 +269,7 @@
 
     ctx.strokeStyle = 'rgba(255,255,255,0.06)'
     ctx.lineWidth = 2
-    ctx.strokeRect(left + 1, top + 1, w - 2, h - 2)
+    ctx.strokeRect(Math.floor(left) + 1.5, Math.floor(top) + 1.5, Math.floor(w) - 3, Math.floor(h) - 3)
 
     ctx.save()
     ctx.beginPath()
@@ -247,12 +282,12 @@
     const grid = 100
     ctx.beginPath()
     for (let x = 0; x <= world.w; x += grid) {
-      const sx = worldToScreenX(x)
+      const sx = worldToScreenX(x) + 0.5
       ctx.moveTo(sx, top)
       ctx.lineTo(sx, bottom)
     }
     for (let y = 0; y <= world.h; y += grid) {
-      const sy = worldToScreenY(y)
+      const sy = worldToScreenY(y) + 0.5
       ctx.moveTo(left, sy)
       ctx.lineTo(right, sy)
     }
@@ -309,14 +344,13 @@
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
     ctx.font = '28px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-    // background pill
     const paddingX = 14
     const paddingY = 8
     const text = announceText
     const metrics = ctx.measureText(text)
     const w = metrics.width + paddingX * 2
     const h = 40
-    const x = (RENDER_W - w) / 2
+    const x = (viewW - w) / 2
     const y = 18
 
     ctx.fillStyle = 'rgba(0,0,0,0.55)'
@@ -326,7 +360,7 @@
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
 
     ctx.fillStyle = '#ffffff'
-    ctx.fillText(text, RENDER_W / 2, y + paddingY)
+    ctx.fillText(text, viewW / 2, y + paddingY)
     ctx.restore()
   }
 
@@ -341,36 +375,34 @@
     ctx.textBaseline = 'bottom'
     ctx.font = '22px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
     ctx.fillStyle = 'rgba(255,255,255,0.9)'
-    ctx.fillText(text, RENDER_W / 2, RENDER_H - 20)
+    ctx.fillText(text, viewW / 2, viewH - 20)
     ctx.restore()
   }
 
   function drawDeathOverlay(me) {
     if (!me || me.alive) return
-    // semi-transparent overlay
     ctx.save()
     ctx.fillStyle = 'rgba(0,0,0,0.55)'
-    ctx.fillRect(0, 0, RENDER_W, RENDER_H)
+    ctx.fillRect(0, 0, viewW, viewH)
 
-    // “YOU DIED” splash
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.font = 'bold 72px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
     ctx.fillStyle = '#ffdddd'
     ctx.strokeStyle = 'rgba(0,0,0,0.6)'
     ctx.lineWidth = 6
-    ctx.strokeText('YOU DIED', RENDER_W / 2, RENDER_H / 2 - 10)
-    ctx.fillText('YOU DIED', RENDER_W / 2, RENDER_H / 2 - 10)
+    ctx.strokeText('YOU DIED', viewW / 2, viewH / 2 - 10)
+    ctx.fillText('YOU DIED', viewW / 2, viewH / 2 - 10)
 
-    // subtle subtext
     ctx.font = '20px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
     ctx.fillStyle = 'rgba(255,255,255,0.85)'
-    ctx.fillText('Spectating until the battle ends…', RENDER_W / 2, RENDER_H / 2 + 36)
+    ctx.fillText('Spectating until the battle ends…', viewW / 2, viewH / 2 + 36)
     ctx.restore()
   }
 
-  function worldToScreenX(wx) { return Math.floor(wx - camera.x + RENDER_W / 2) }
-  function worldToScreenY(wy) { return Math.floor(wy - camera.y + RENDER_H / 2) }
+  // World <-> Screen
+  function worldToScreenX(wx) { return Math.floor(wx - camera.x + viewW / 2) }
+  function worldToScreenY(wy) { return Math.floor(wy - camera.y + viewH / 2) }
 
   function onExitClick() {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'leaveGame' }))
@@ -382,4 +414,4 @@
 })()
 
 window.GameClient = GameClient
-console.log('[Client] GameClient ready')
+console.log('[Client] GameClient ready (hi-res)')
