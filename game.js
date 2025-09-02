@@ -7,8 +7,8 @@ export default class Game {
     this.players = players
     this.bounds = { w: 1200, h: 800 }
     this.speed = 300
-    this.state = new Map() // id -> player state
-    this.inputs = new Map()
+    this.state = new Map()  // id -> player state
+    this.inputs = new Map() // id -> {w,a,s,d}
     this.closed = false
     this.finishing = false
 
@@ -24,6 +24,7 @@ export default class Game {
 
     const tankKeys = Object.keys(TANK_DEFS)
 
+    // initialize players
     players.forEach((p, i) => {
       const tk = tankKeys[Math.floor(Math.random() * tankKeys.length)]
       const def = TANK_DEFS[tk]
@@ -32,6 +33,7 @@ export default class Game {
       this.state.set(p.id, {
         x: spawn[i % spawn.length].x,
         y: spawn[i % spawn.length].y,
+        rot: 0, // radians, facing +X
         size: def.size,
         health: def.maxHealth,
         maxHealth: def.maxHealth,
@@ -39,23 +41,17 @@ export default class Game {
         alive: true,
         tankId: tk,
         shape: def.shape,
-        barrels: def.barrels, // cosmetic on client
+        barrels: def.barrels,
       })
-
       this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
     })
 
-    // Send matchStart with roster + each player's tank loadout
+    // send match start info (+ tanks)
     const tanksForPlayers = players.map(p => {
       const st = this.state.get(p.id)
       return {
         id: p.id,
-        tank: {
-          name: st.tankId,
-          shape: st.shape,
-          size: st.size,
-          barrels: st.barrels,
-        },
+        tank: { name: st.tankId, shape: st.shape, size: st.size, barrels: st.barrels },
       }
     })
 
@@ -73,15 +69,27 @@ export default class Game {
       p.ws.on('message', (msg) => {
         try {
           const d = JSON.parse(msg)
+
+          // keyboard movement input
           if (d.type === 'input' && this.inputs.has(p.id)) {
             const st = this.state.get(p.id)
             if (!st?.alive) return
             const inp = this.inputs.get(p.id)
-            inp.w = !!d.w
-            inp.a = !!d.a
-            inp.s = !!d.s
-            inp.d = !!d.d
+            if (typeof d.w === 'boolean') inp.w = d.w
+            if (typeof d.a === 'boolean') inp.a = d.a
+            if (typeof d.s === 'boolean') inp.s = d.s
+            if (typeof d.d === 'boolean') inp.d = d.d
           }
+
+          // mouse aim (rotation in radians)
+          if (d.type === 'aim') {
+            const st = this.state.get(p.id)
+            if (!st?.alive) return
+            if (typeof d.angle === 'number' && Number.isFinite(d.angle)) {
+              st.rot = normalizeAngle(d.angle)
+            }
+          }
+
           if (d.type === 'leaveGame') this.end('left')
         } catch {}
       })
@@ -95,7 +103,7 @@ export default class Game {
   tick() {
     const dt = 1 / 30
 
-    // Movement
+    // movement
     for (const p of this.players) {
       const inp = this.inputs.get(p.id)
       const st = this.state.get(p.id)
@@ -110,7 +118,7 @@ export default class Game {
       st.y = clamp(st.y + dy * this.speed * dt, r, this.bounds.h - r)
     }
 
-    // Collisions + body damage via SAT MTV resolution
+    // collisions (SAT with rotation)
     for (let i = 0; i < this.players.length; i++) {
       for (let j = i + 1; j < this.players.length; j++) {
         const aId = this.players[i].id
@@ -119,20 +127,16 @@ export default class Game {
         const B = this.state.get(bId)
         if (!A?.alive || !B?.alive) continue
 
-        const shapeA = buildShape(A)
-        const shapeB = buildShape(B)
-
+        const shapeA = buildShape(A) // uses A.rot
+        const shapeB = buildShape(B) // uses B.rot
         const mtv = computeMTV(shapeA, shapeB)
         if (mtv.overlap) {
           const pushX = (mtv.axis.x * mtv.depth) / 2
           const pushY = (mtv.axis.y * mtv.depth) / 2
-          // Move opposite directions along MTV
-          A.x -= pushX
-          A.y -= pushY
-          B.x += pushX
-          B.y += pushY
+          A.x -= pushX; A.y -= pushY
+          B.x += pushX; B.y += pushY
 
-          // Clamp to arena
+          // clamp inside arena using bounding radius
           const rA = getBoundingRadius(A)
           const rB = getBoundingRadius(B)
           A.x = clamp(A.x, rA, this.bounds.w - rA)
@@ -140,14 +144,14 @@ export default class Game {
           B.x = clamp(B.x, rB, this.bounds.w - rB)
           B.y = clamp(B.y, rB, this.bounds.h - rB)
 
-          // Body damage while overlapping
+          // body damage while overlapping
           A.health -= B.bodyDamage * dt
           B.health -= A.bodyDamage * dt
         }
       }
     }
 
-    // Death (do not end match immediately)
+    // deaths (don’t end match yet)
     for (const p of this.players) {
       const st = this.state.get(p.id)
       if (!st) continue
@@ -157,15 +161,14 @@ export default class Game {
       }
     }
 
-    // Victory condition
+    // victory condition (1 alive) or draw (0 alive)
     if (!this.finishing) {
-      const alive = this.players.filter((p) => this.state.get(p.id)?.alive)
+      const alive = this.players.filter(p => this.state.get(p.id)?.alive)
       if (alive.length === 1) {
         this.finishing = true
         const winner = alive[0]
-        const winnerName =
-          this.players.find(pp => pp.id === winner.id)?.name ||
-          `P-${String(winner.id).slice(0, 4)}`
+        const winnerName = this.players.find(pp => pp.id === winner.id)?.name
+          || `P-${String(winner.id).slice(0, 4)}`
         this.broadcast({ type: 'announcement', text: `[${winnerName}] has won the battle!` })
         this.broadcast({ type: 'exitCountdown', seconds: 5 })
         setTimeout(() => this.end('victory', { winnerId: winner.id }), 5000)
@@ -177,7 +180,7 @@ export default class Game {
       }
     }
 
-    // Broadcast state
+    // broadcast state
     const payload = {
       type: 'state',
       ts: Date.now(),
@@ -185,15 +188,14 @@ export default class Game {
         const st = this.state.get(p.id)
         return {
           id: p.id,
-          x: st.x,
-          y: st.y,
+          x: st.x, y: st.y,
+          rot: st.rot,
           size: st.size,
-          health: st.health,
-          maxHealth: st.maxHealth,
+          health: st.health, maxHealth: st.maxHealth,
           alive: st.alive,
-          shape: st.shape, // client needs for rendering
+          shape: st.shape,
         }
-      }),
+      })
     }
     this.broadcast(payload)
   }
@@ -215,10 +217,10 @@ export default class Game {
   }
 }
 
-/* ---------- collision + geometry helpers ---------- */
+/* ---------- geometry / SAT ---------- */
 
 function getBoundingRadius(st) {
-  // Circle uses size directly; polygon uses same as circumscribed radius
+  // circumscribed radius works for circle & regular polygon
   return st.size
 }
 
@@ -226,8 +228,17 @@ function buildShape(st) {
   if (st.shape === 0) {
     return { kind: 'circle', x: st.x, y: st.y, r: st.size }
   } else {
-    return { kind: 'polygon', verts: regularPolygon(st.x, st.y, st.size, st.shape) }
+    return { kind: 'polygon', verts: regularPolygon(st.x, st.y, st.size, st.shape, st.rot) }
   }
+}
+
+function regularPolygon(cx, cy, r, sides, rot = 0) {
+  const verts = []
+  for (let i = 0; i < sides; i++) {
+    const a = rot + (i * 2 * Math.PI) / sides
+    verts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r })
+  }
+  return verts
 }
 
 function computeMTV(a, b) {
@@ -240,28 +251,18 @@ function computeMTV(a, b) {
     const nx = dx / d, ny = dy / d
     return { overlap: true, axis: { x: nx, y: ny }, depth: minDist - d }
   }
-
-  if (a.kind === 'polygon' && b.kind === 'polygon') {
-    return satPolyPoly(a.verts, b.verts)
-  }
-
-  // poly-circle
-  if (a.kind === 'polygon' && b.kind === 'circle') {
-    return satPolyCircle(a.verts, b)
-  }
+  if (a.kind === 'polygon' && b.kind === 'polygon') return satPolyPoly(a.verts, b.verts)
+  if (a.kind === 'polygon' && b.kind === 'circle') return satPolyCircle(a.verts, b)
   if (a.kind === 'circle' && b.kind === 'polygon') {
     const res = satPolyCircle(b.verts, a)
-    // axis points from A to B; flip for circle-poly order
     return res.overlap ? { overlap: true, axis: { x: -res.axis.x, y: -res.axis.y }, depth: res.depth } : res
   }
-
   return { overlap: false, axis: { x: 0, y: 0 }, depth: 0 }
 }
 
 function satPolyPoly(A, B) {
   let minOverlap = Infinity
   let minAxis = { x: 0, y: 0 }
-
   for (let pass = 0; pass < 2; pass++) {
     const P = pass === 0 ? A : B
     for (let i = 0; i < P.length; i++) {
@@ -275,9 +276,8 @@ function satPolyPoly(A, B) {
       if (overlap <= 0) return { overlap: false, axis: { x: 0, y: 0 }, depth: 0 }
       if (overlap < minOverlap) {
         minOverlap = overlap
-        // direction from A to B along axis
         const cA = centroid(A), cB = centroid(B)
-        const dir = ( (cB.x - cA.x) * axis.x + (cB.y - cA.y) * axis.y ) < 0 ? -1 : 1
+        const dir = ((cB.x - cA.x) * axis.x + (cB.y - cA.y) * axis.y) < 0 ? -1 : 1
         minAxis = { x: axis.x * dir, y: axis.y * dir }
       }
     }
@@ -288,7 +288,8 @@ function satPolyPoly(A, B) {
 function satPolyCircle(verts, circle) {
   let minOverlap = Infinity
   let minAxis = { x: 0, y: 0 }
-  // test polygon edge normals
+
+  // test polygon normals
   for (let i = 0; i < verts.length; i++) {
     const j = (i + 1) % verts.length
     const edgeX = verts[j].x - verts[i].x
@@ -303,18 +304,17 @@ function satPolyCircle(verts, circle) {
     if (overlap < minOverlap) {
       minOverlap = overlap
       const cPoly = centroid(verts)
-      const dir = ( ((circle.x - cPoly.x) * axis.x + (circle.y - cPoly.y) * axis.y) < 0 ) ? -1 : 1
+      const dir = (((circle.x - cPoly.x) * axis.x + (circle.y - cPoly.y) * axis.y) < 0) ? -1 : 1
       minAxis = { x: axis.x * dir, y: axis.y * dir }
     }
   }
-  // plus axis towards closest vertex
-  let closest = null
-  let minDist = Infinity
+
+  // axis to closest vertex
+  let closest = null, minD2 = Infinity
   for (const v of verts) {
-    const dx = circle.x - v.x
-    const dy = circle.y - v.y
+    const dx = circle.x - v.x, dy = circle.y - v.y
     const d2 = dx * dx + dy * dy
-    if (d2 < minDist) { minDist = d2; closest = v }
+    if (d2 < minD2) { minD2 = d2; closest = v }
   }
   if (closest) {
     const axis = normalize({ x: circle.x - closest.x, y: circle.y - closest.y })
@@ -324,10 +324,7 @@ function satPolyCircle(verts, circle) {
     const maxC = cProj + circle.r
     const overlap = Math.min(maxP, maxC) - Math.max(minP, minC)
     if (overlap <= 0) return { overlap: false, axis: { x: 0, y: 0 }, depth: 0 }
-    if (overlap < minOverlap) {
-      minOverlap = overlap
-      minAxis = axis
-    }
+    if (overlap < minOverlap) { minOverlap = overlap; minAxis = axis }
   }
 
   return { overlap: true, axis: minAxis, depth: minOverlap }
@@ -350,20 +347,17 @@ function centroid(verts) {
   return { x: x / n, y: y / n }
 }
 
-function regularPolygon(cx, cy, r, sides) {
-  const verts = []
-  const rot = 0 // facing +X
-  for (let i = 0; i < sides; i++) {
-    const a = rot + (i * 2 * Math.PI) / sides
-    verts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r })
-  }
-  return verts
-}
-
 function normalize(v) {
   const m = Math.hypot(v.x, v.y)
   if (m === 0) return { x: 1, y: 0 }
   return { x: v.x / m, y: v.y / m }
+}
+
+function normalizeAngle(a) {
+  const two = Math.PI * 2
+  a = ((a % two) + two) % two
+  if (a > Math.PI) a -= two
+  return a
 }
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
