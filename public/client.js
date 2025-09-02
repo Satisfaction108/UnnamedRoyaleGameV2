@@ -1,13 +1,13 @@
 ﻿const GameClient = (() => {
-  const $ = id => document.getElementById(id)
+  const $ = (id) => document.getElementById(id)
 
   const RENDER_W = 1600
   const RENDER_H = 900
 
   const INTERP_DELAY_MS = 120
-  const MAX_SNAPSHOTS    = 90
-  const OFFSET_SMOOTH    = 0.12
-  const CAM_SMOOTH       = 0.20
+  const MAX_SNAPSHOTS = 90
+  const OFFSET_SMOOTH = 0.12
+  const CAM_SMOOTH = 0.2
 
   let ws = null
   let canvas = null
@@ -18,7 +18,7 @@
   let myId = null
   let world = { w: 2000, h: 2000 }
 
-  let keys = { w:false, a:false, s:false, d:false }
+  let keys = { w: false, a: false, s: false, d: false }
 
   // snapshots for interpolation
   const snapshots = []
@@ -29,87 +29,146 @@
 
   const camera = { x: 0, y: 0 }
 
-  function start(m){
+  // Announcement + exit timer UI
+  let announceText = null
+  let announceUntil = 0
+  let exitCountdownSecs = 0
+  let exitCountdownStart = 0
+
+  // Track my alive state for “YOU DIED” overlay
+  let lastAlive = true
+  let deathOverlaySince = 0
+
+  function start(m) {
     ws = window.__wsRef
     myId = m.you
     world = { w: m.w || 2000, h: m.h || 2000 }
 
-    // load roster (id->name)
+    // roster (id->name)
+    names.clear()
     if (Array.isArray(m.roster)) {
-      names.clear()
-      m.roster.forEach(r => names.set(r.id, r.name || `P-${String(r.id).slice(0,4)}`))
+      m.roster.forEach((r) => names.set(r.id, r.name || `P-${String(r.id).slice(0, 4)}`))
     }
 
     canvas = $('gameCanvas')
-    ctx = canvas.getContext('2d', { alpha:false, desynchronized:true })
+    ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
     canvas.width = RENDER_W
     canvas.height = RENDER_H
     canvas.style.width = '100vw'
     canvas.style.height = '100vh'
 
-    $('queueScreen').hidden = true
-    $('gameView').hidden = false
+    $('queueScreen') && ($('queueScreen').hidden = true)
+    $('gameView') && ($('gameView').hidden = false)
 
-    window.addEventListener('keydown', onKey, { passive:false })
-    window.addEventListener('keyup', onKey, { passive:false })
+    window.addEventListener('keydown', onKey, { passive: false })
+    window.addEventListener('keyup', onKey, { passive: false })
 
     running = true
     anim = requestAnimationFrame(loop)
+
+    // reset UI bits
+    announceText = null
+    announceUntil = 0
+    exitCountdownSecs = 0
+    exitCountdownStart = 0
+    lastAlive = true
+    deathOverlaySince = 0
   }
 
-  function stop(){
+  function stop() {
     running = false
-    try{ cancelAnimationFrame(anim) }catch{}
+    try { cancelAnimationFrame(anim) } catch {}
     window.removeEventListener('keydown', onKey)
     window.removeEventListener('keyup', onKey)
-    $('gameView').hidden = true
+    $('gameView') && ($('gameView').hidden = true)
     snapshots.length = 0
     names.clear()
   }
 
-  function handle(msg){
-    if (msg.type === 'matchStart'){ start(msg); return true }
+  function handle(msg) {
+    if (msg.type === 'matchStart') {
+      start(msg)
+      return true
+    }
     if (!running) return false
 
-    if (msg.type === 'state'){
-      if (typeof msg.ts === 'number'){
+    if (msg.type === 'state') {
+      if (typeof msg.ts === 'number') {
         const estimate = Date.now() - msg.ts
         serverOffset += (estimate - serverOffset) * OFFSET_SMOOTH
       }
       const map = new Map()
-      for (const p of msg.players || []) map.set(p.id, { x:p.x, y:p.y })
+      for (const p of msg.players || []) {
+        map.set(p.id, {
+          x: p.x,
+          y: p.y,
+          size: p.size,
+          health: p.health,
+          maxHealth: p.maxHealth,
+          alive: p.alive !== false
+        })
+      }
       snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map })
       if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
+
+      // update my alive state for death overlay effect
+      const me = map.get(myId)
+      const nowAlive = !!me?.alive
+      if (lastAlive && !nowAlive) {
+        deathOverlaySince = performance.now()
+      }
+      lastAlive = nowAlive
+
       return true
     }
 
-    if (msg.type === 'matchEnd'){ stop(); window.__onMatchEnd && window.__onMatchEnd(); return true }
+    if (msg.type === 'announcement' && typeof msg.text === 'string') {
+      announceText = msg.text
+      announceUntil = performance.now() + 4000
+      return true
+    }
+
+    if (msg.type === 'exitCountdown' && typeof msg.seconds === 'number') {
+      exitCountdownSecs = Math.max(0, Math.floor(msg.seconds))
+      exitCountdownStart = performance.now()
+      return true
+    }
+
+    if (msg.type === 'matchEnd') {
+      stop()
+      window.__onMatchEnd && window.__onMatchEnd(msg)
+      return true
+    }
     return false
   }
 
-  function onKey(e){
+  function onKey(e) {
     const k = e.key.toLowerCase()
-    if (['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright',' '].includes(k)) e.preventDefault()
+    if (['w', 'a', 's', 'd', 'arrowup', 'arrowleft', 'arrowdown', 'arrowright', ' '].includes(k))
+      e.preventDefault()
     let changed = false
     if (e.type === 'keydown') {
-      if (k==='w'||k==='arrowup'){ if(!keys.w){ keys.w=true; changed=true } }
-      if (k==='a'||k==='arrowleft'){ if(!keys.a){ keys.a=true; changed=true } }
-      if (k==='s'||k==='arrowdown'){ if(!keys.s){ keys.s=true; changed=true } }
-      if (k==='d'||k==='arrowright'){ if(!keys.d){ keys.d=true; changed=true } }
+      if (k === 'w' || k === 'arrowup') { if (!keys.w) { keys.w = true; changed = true } }
+      if (k === 'a' || k === 'arrowleft') { if (!keys.a) { keys.a = true; changed = true } }
+      if (k === 's' || k === 'arrowdown') { if (!keys.s) { keys.s = true; changed = true } }
+      if (k === 'd' || k === 'arrowright') { if (!keys.d) { keys.d = true; changed = true } }
     } else {
-      if (k==='w'||k==='arrowup'){ if(keys.w){ keys.w=false; changed=true } }
-      if (k==='a'||k==='arrowleft'){ if(keys.a){ keys.a=false; changed=true } }
-      if (k==='s'||k==='arrowdown'){ if(keys.s){ keys.s=false; changed=true } }
-      if (k==='d'||k==='arrowright'){ if(keys.d){ keys.d=false; changed=true } }
+      if (k === 'w' || k === 'arrowup') { if (keys.w) { keys.w = false; changed = true } }
+      if (k === 'a' || k === 'arrowleft') { if (keys.a) { keys.a = false; changed = true } }
+      if (k === 's' || k === 'arrowdown') { if (keys.s) { keys.s = false; changed = true } }
+      if (k === 'd' || k === 'arrowright') { if (keys.d) { keys.d = false; changed = true } }
     }
-    if (changed && ws && ws.readyState===1) ws.send(JSON.stringify({ type:'input', ...keys }))
+    if (changed && ws && ws.readyState === 1)
+      ws.send(JSON.stringify({ type: 'input', ...keys }))
   }
 
-  function getInterpolated(renderServerTime){
+  function getInterpolated(renderServerTime) {
     if (snapshots.length === 0) return []
     if (snapshots.length === 1) {
       const only = snapshots[0].map
-      return [...only.entries()].map(([id, p]) => ({ id, x:p.x, y:p.y }))
+      return [...only.entries()].map(([id, p]) => ({
+        id, x: p.x, y: p.y, size: p.size, health: p.health, maxHealth: p.maxHealth, alive: p.alive
+      }))
     }
     let i = snapshots.length - 2
     while (i >= 0 && snapshots[i].ts > renderServerTime) i--
@@ -121,42 +180,51 @@
 
     const out = []
     const ids = new Set([...s0.map.keys(), ...s1.map.keys()])
-    ids.forEach(id => {
+    ids.forEach((id) => {
       const p0 = s0.map.get(id) || s1.map.get(id)
       const p1 = s1.map.get(id) || s0.map.get(id)
       const x = p0.x + (p1.x - p0.x) * t
       const y = p0.y + (p1.y - p0.y) * t
-      out.push({ id, x, y })
+      const size = (p0.size ?? 16) + ((p1.size ?? 16) - (p0.size ?? 16)) * t
+      const health = p1.health ?? p0.health ?? 0
+      const maxHealth = p1.maxHealth ?? p0.maxHealth ?? 1
+      const alive = p1.alive ?? p0.alive ?? true
+      out.push({ id, x, y, size, health, maxHealth, alive })
     })
     return out
   }
 
-  function loop(){
+  function loop() {
     if (!running) return
 
     const renderServerTime = Date.now() - serverOffset - INTERP_DELAY_MS
     const players = getInterpolated(renderServerTime)
 
-    const me = players.find(p => p.id === myId)
-    if (me){
+    const me = players.find((p) => p.id === myId)
+    if (me) {
       camera.x += (me.x - camera.x) * CAM_SMOOTH
       camera.y += (me.y - camera.y) * CAM_SMOOTH
     }
 
-    ctx.clearRect(0,0,RENDER_W,RENDER_H)
+    ctx.clearRect(0, 0, RENDER_W, RENDER_H)
     drawWorld()
+
     drawPlayers(players)
+
+    drawAnnouncements()
+    drawExitCountdown()
+    drawDeathOverlay(me)
 
     anim = requestAnimationFrame(loop)
   }
 
-  function drawWorld(){
+  function drawWorld() {
     ctx.fillStyle = '#05080f'
-    ctx.fillRect(0,0,RENDER_W,RENDER_H)
+    ctx.fillRect(0, 0, RENDER_W, RENDER_H)
 
-    const left   = worldToScreenX(0)
-    const top    = worldToScreenY(0)
-    const right  = worldToScreenX(world.w)
+    const left = worldToScreenX(0)
+    const top = worldToScreenY(0)
+    const right = worldToScreenX(world.w)
     const bottom = worldToScreenY(world.h)
     const w = right - left
     const h = bottom - top
@@ -177,62 +245,140 @@
     ctx.lineWidth = 1
 
     const grid = 100
-    const startX = 0
-    const endX   = world.w
-    const startY = 0
-    const endY   = world.h
-
     ctx.beginPath()
-    for (let x = startX; x <= endX; x += grid) {
+    for (let x = 0; x <= world.w; x += grid) {
       const sx = worldToScreenX(x)
-      ctx.moveTo(sx, top); ctx.lineTo(sx, bottom)
+      ctx.moveTo(sx, top)
+      ctx.lineTo(sx, bottom)
     }
-    for (let y = startY; y <= endY; y += grid) {
+    for (let y = 0; y <= world.h; y += grid) {
       const sy = worldToScreenY(y)
-      ctx.moveTo(left, sy); ctx.lineTo(right, sy)
+      ctx.moveTo(left, sy)
+      ctx.lineTo(right, sy)
     }
     ctx.stroke()
     ctx.restore()
   }
 
-  function drawPlayers(ps){
+  function drawPlayers(ps) {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'bottom'
     ctx.font = '20px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
 
-    for (const p of ps){
+    for (const p of ps) {
       const x = worldToScreenX(p.x)
       const y = worldToScreenY(p.y)
+      const r = Math.max(8, Math.min(36, p.size || 16))
 
-      // circle
-      ctx.fillStyle = (p.id===myId) ? '#34d399' : '#60a5fa'
+      // body
       ctx.beginPath()
-      ctx.arc(x, y, 14, 0, Math.PI*2)
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fillStyle = !p.alive ? '#4b5563' : (p.id === myId ? '#34d399' : '#60a5fa')
       ctx.fill()
 
-      // label
-      const label = names.get(p.id) || `P-${String(p.id).slice(0,4)}`
-      const offset = 18
-      // subtle stroke for readability
+      // health bar
+      const pct = Math.max(0, Math.min(1, (p.health || 0) / (p.maxHealth || 1)))
+      const barW = Math.max(30, r * 2)
+      const barH = 6
+      const barX = Math.round(x - barW / 2)
+      const barY = Math.round(y - r - 14)
+
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'
+      ctx.fillRect(barX, barY, barW, barH)
+      ctx.fillStyle = '#b91c1c'
+      ctx.fillRect(barX, barY, barW, barH)
+      ctx.fillStyle = '#22c55e'
+      ctx.fillRect(barX, barY, Math.round(barW * pct), barH)
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+      ctx.lineWidth = 1
+      ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1)
+
+      // name label
+      const label = names.get(p.id) || `P-${String(p.id).slice(0, 4)}`
       ctx.lineWidth = 4
       ctx.strokeStyle = 'rgba(0,0,0,0.35)'
-      ctx.strokeText(label, x, y - 14 - 4)
-      // fill (own name slightly tinted)
-      ctx.fillStyle = (p.id===myId) ? '#e6fff4' : '#f3f7ff'
-      ctx.fillText(label, x, y - 14 - 4)
+      ctx.strokeText(label, x, barY - 4)
+      ctx.fillStyle = p.id === myId ? '#e6fff4' : '#f3f7ff'
+      ctx.fillText(label, x, barY - 4)
     }
   }
 
-  function worldToScreenX(wx){ return Math.floor((wx - camera.x) + RENDER_W/2) }
-  function worldToScreenY(wy){ return Math.floor((wy - camera.y) + RENDER_H/2) }
+  function drawAnnouncements() {
+    if (!announceText || performance.now() > announceUntil) return
+    ctx.save()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.font = '28px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+    // background pill
+    const paddingX = 14
+    const paddingY = 8
+    const text = announceText
+    const metrics = ctx.measureText(text)
+    const w = metrics.width + paddingX * 2
+    const h = 40
+    const x = (RENDER_W - w) / 2
+    const y = 18
 
-  function exit(){
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type:'leaveGame' }))
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'
+    ctx.fillRect(x, y, w, h)
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
+
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(text, RENDER_W / 2, y + paddingY)
+    ctx.restore()
+  }
+
+  function drawExitCountdown() {
+    if (!exitCountdownSecs) return
+    const elapsed = Math.floor((performance.now() - exitCountdownStart) / 1000)
+    const remain = Math.max(0, exitCountdownSecs - elapsed)
+    if (remain <= 0) return
+    const text = `Exiting battle in ${remain}s...`
+    ctx.save()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'bottom'
+    ctx.font = '22px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    ctx.fillText(text, RENDER_W / 2, RENDER_H - 20)
+    ctx.restore()
+  }
+
+  function drawDeathOverlay(me) {
+    if (!me || me.alive) return
+    // semi-transparent overlay
+    ctx.save()
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'
+    ctx.fillRect(0, 0, RENDER_W, RENDER_H)
+
+    // “YOU DIED” splash
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = 'bold 72px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+    ctx.fillStyle = '#ffdddd'
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+    ctx.lineWidth = 6
+    ctx.strokeText('YOU DIED', RENDER_W / 2, RENDER_H / 2 - 10)
+    ctx.fillText('YOU DIED', RENDER_W / 2, RENDER_H / 2 - 10)
+
+    // subtle subtext
+    ctx.font = '20px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'
+    ctx.fillText('Spectating until the battle ends…', RENDER_W / 2, RENDER_H / 2 + 36)
+    ctx.restore()
+  }
+
+  function worldToScreenX(wx) { return Math.floor(wx - camera.x + RENDER_W / 2) }
+  function worldToScreenY(wy) { return Math.floor(wy - camera.y + RENDER_H / 2) }
+
+  function onExitClick() {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'leaveGame' }))
     stop()
     window.__onMatchEnd && window.__onMatchEnd()
   }
 
-  return { handle, exit }
+  return { handle, exit: onExitClick }
 })()
 
 window.GameClient = GameClient
