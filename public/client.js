@@ -6,6 +6,7 @@
   const MAX_SNAPSHOTS = 90
   const OFFSET_SMOOTH = 0.12
   const CAM_SMOOTH = 0.2
+  const STROKE_W = 4
 
   let ws = null
   let canvas = null
@@ -16,47 +17,47 @@
   let myId = null
   let world = { w: 2000, h: 2000 }
 
-  // High-res sizing
+  // HiDPI
   let dpr = Math.min(window.devicePixelRatio || 1, 3)
   let viewW = 0
   let viewH = 0
 
   let keys = { w: false, a: false, s: false, d: false }
 
-  // snapshots for interpolation
   const snapshots = []
   let serverOffset = 0
 
   // id -> username
   const names = new Map()
+  // id -> tank { name, shape, size, barrels }
+  const tanks = new Map()
 
   const camera = { x: 0, y: 0 }
 
-  // Announcement + exit timer UI
+  // UI
   let announceText = null
   let announceUntil = 0
   let exitCountdownSecs = 0
   let exitCountdownStart = 0
 
-  // Track my alive state for “YOU DIED” overlay
   let lastAlive = true
-  let deathOverlaySince = 0
 
   function start(m) {
     ws = window.__wsRef
     myId = m.you
     world = { w: m.w || 2000, h: m.h || 2000 }
 
-    // roster (id->name)
     names.clear()
     if (Array.isArray(m.roster)) {
       m.roster.forEach((r) => names.set(r.id, r.name || `P-${String(r.id).slice(0, 4)}`))
     }
+    tanks.clear()
+    if (Array.isArray(m.tanks)) {
+      m.tanks.forEach(({ id, tank }) => tanks.set(id, tank))
+    }
 
     canvas = $('gameCanvas')
     ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
-
-    // High-res init + listeners
     resizeCanvas()
     window.addEventListener('resize', onResize, { passive: true })
 
@@ -69,13 +70,11 @@
     running = true
     anim = requestAnimationFrame(loop)
 
-    // reset UI bits
     announceText = null
     announceUntil = 0
     exitCountdownSecs = 0
     exitCountdownStart = 0
     lastAlive = true
-    deathOverlaySince = 0
   }
 
   function stop() {
@@ -87,13 +86,11 @@
     $('gameView') && ($('gameView').hidden = true)
     snapshots.length = 0
     names.clear()
+    tanks.clear()
   }
 
   function handle(msg) {
-    if (msg.type === 'matchStart') {
-      start(msg)
-      return true
-    }
+    if (msg.type === 'matchStart') { start(msg); return true }
     if (!running) return false
 
     if (msg.type === 'state') {
@@ -104,25 +101,18 @@
       const map = new Map()
       for (const p of msg.players || []) {
         map.set(p.id, {
-          x: p.x,
-          y: p.y,
+          x: p.x, y: p.y,
           size: p.size,
-          health: p.health,
-          maxHealth: p.maxHealth,
-          alive: p.alive !== false
+          health: p.health, maxHealth: p.maxHealth,
+          alive: p.alive !== false,
+          shape: p.shape ?? (tanks.get(p.id)?.shape || 0),
         })
       }
       snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map })
       if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
 
-      // update my alive state for death overlay effect
       const me = map.get(myId)
-      const nowAlive = !!me?.alive
-      if (lastAlive && !nowAlive) {
-        deathOverlaySince = performance.now()
-      }
-      lastAlive = nowAlive
-
+      lastAlive = !!me?.alive
       return true
     }
 
@@ -138,47 +128,33 @@
       return true
     }
 
-    if (msg.type === 'matchEnd') {
-      stop()
-      window.__onMatchEnd && window.__onMatchEnd(msg)
-      return true
-    }
+    if (msg.type === 'matchEnd') { stop(); window.__onMatchEnd && window.__onMatchEnd(msg); return true }
     return false
   }
 
-  // ===== High-res canvas helpers =====
+  /* ===== HiDPI ===== */
   function onResize() {
     const newDpr = Math.min(window.devicePixelRatio || 1, 3)
     if (newDpr !== dpr) dpr = newDpr
     resizeCanvas()
   }
-
   function resizeCanvas() {
-    // CSS size in layout pixels
     const cssW = window.innerWidth
     const cssH = window.innerHeight
-
-    // Backing store in device pixels
     canvas.width = Math.max(1, Math.round(cssW * dpr))
     canvas.height = Math.max(1, Math.round(cssH * dpr))
-
-    // Display size (kept separate; we draw in CSS px)
     canvas.style.width = cssW + 'px'
     canvas.style.height = cssH + 'px'
-
-    // Normalize drawing space so 1 unit = 1 CSS pixel
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.imageSmoothingEnabled = true
-
     viewW = cssW
     viewH = cssH
   }
 
-  // ===== Input =====
+  /* ===== Input ===== */
   function onKey(e) {
     const k = e.key.toLowerCase()
-    if (['w', 'a', 's', 'd', 'arrowup', 'arrowleft', 'arrowdown', 'arrowright', ' '].includes(k))
-      e.preventDefault()
+    if (['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright',' '].includes(k)) e.preventDefault()
     let changed = false
     if (e.type === 'keydown') {
       if (k === 'w' || k === 'arrowup') { if (!keys.w) { keys.w = true; changed = true } }
@@ -191,23 +167,19 @@
       if (k === 's' || k === 'arrowdown') { if (keys.s) { keys.s = false; changed = true } }
       if (k === 'd' || k === 'arrowright') { if (keys.d) { keys.d = false; changed = true } }
     }
-    if (changed && ws && ws.readyState === 1)
-      ws.send(JSON.stringify({ type: 'input', ...keys }))
+    if (changed && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'input', ...keys }))
   }
 
-  // ===== Interpolation =====
+  /* ===== Interpolation ===== */
   function getInterpolated(renderServerTime) {
     if (snapshots.length === 0) return []
     if (snapshots.length === 1) {
       const only = snapshots[0].map
-      return [...only.entries()].map(([id, p]) => ({
-        id, x: p.x, y: p.y, size: p.size, health: p.health, maxHealth: p.maxHealth, alive: p.alive
-      }))
+      return [...only.entries()].map(([id, p]) => ({ id, ...p }))
     }
     let i = snapshots.length - 2
     while (i >= 0 && snapshots[i].ts > renderServerTime) i--
-    const a = Math.max(0, i)
-    const b = Math.min(snapshots.length - 1, a + 1)
+    const a = Math.max(0, i), b = Math.min(snapshots.length - 1, a + 1)
     const s0 = snapshots[a], s1 = snapshots[b]
     const t0 = s0.ts, t1 = s1.ts
     const t = (t1 === t0) ? 1 : Math.max(0, Math.min(1, (renderServerTime - t0) / (t1 - t0)))
@@ -223,37 +195,33 @@
       const health = p1.health ?? p0.health ?? 0
       const maxHealth = p1.maxHealth ?? p0.maxHealth ?? 1
       const alive = p1.alive ?? p0.alive ?? true
-      out.push({ id, x, y, size, health, maxHealth, alive })
+      const shape = p1.shape ?? p0.shape ?? (tanks.get(id)?.shape || 0)
+      out.push({ id, x, y, size, health, maxHealth, alive, shape })
     })
     return out
   }
 
-  // ===== Render loop =====
+  /* ===== Render loop ===== */
   function loop() {
     if (!running) return
-
     const renderServerTime = Date.now() - serverOffset - INTERP_DELAY_MS
     const players = getInterpolated(renderServerTime)
 
-    const me = players.find((p) => p.id === myId)
-    if (me) {
-      camera.x += (me.x - camera.x) * CAM_SMOOTH
-      camera.y += (me.y - camera.y) * CAM_SMOOTH
-    }
+    const me = players.find(p => p.id === myId)
+    if (me) { camera.x += (me.x - camera.x) * CAM_SMOOTH; camera.y += (me.y - camera.y) * CAM_SMOOTH }
 
     ctx.clearRect(0, 0, viewW, viewH)
     drawWorld()
     drawPlayers(players)
     drawAnnouncements()
     drawExitCountdown()
-    drawDeathOverlay(me)
+    if (me && !me.alive) drawDeathOverlay()
 
     anim = requestAnimationFrame(loop)
   }
 
-  // ===== Drawing =====
+  /* ===== Drawing ===== */
   function drawWorld() {
-    // background
     ctx.fillStyle = '#05080f'
     ctx.fillRect(0, 0, viewW, viewH)
 
@@ -269,7 +237,7 @@
 
     ctx.strokeStyle = 'rgba(255,255,255,0.06)'
     ctx.lineWidth = 2
-    ctx.strokeRect(Math.floor(left) + 1.5, Math.floor(top) + 1.5, Math.floor(w) - 3, Math.floor(h) - 3)
+    ctx.strokeRect(Math.floor(left)+1.5, Math.floor(top)+1.5, Math.floor(w)-3, Math.floor(h)-3)
 
     ctx.save()
     ctx.beginPath()
@@ -301,17 +269,35 @@
     ctx.font = '20px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
 
     for (const p of ps) {
+      const tank = tanks.get(p.id)
       const x = worldToScreenX(p.x)
       const y = worldToScreenY(p.y)
-      const r = Math.max(8, Math.min(36, p.size || 16))
+      const r = Math.max(8, p.size || tank?.size || 16)
+      const fill = !p.alive ? '#4b5563' : (p.id === myId ? '#34d399' : '#60a5fa')
+      const stroke = darker(fill, 0.6)
 
-      // body
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, Math.PI * 2)
-      ctx.fillStyle = !p.alive ? '#4b5563' : (p.id === myId ? '#34d399' : '#60a5fa')
-      ctx.fill()
+      // BODY
+      ctx.lineWidth = STROKE_W
+      ctx.fillStyle = fill
+      ctx.strokeStyle = stroke
 
-      // health bar
+      if ((tank?.shape ?? p.shape ?? 0) === 0) {
+        ctx.beginPath()
+        ctx.arc(x, y, r, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else {
+        const sides = tank?.shape ?? p.shape
+        const verts = regularPolygonScreen(x, y, r, sides)
+        ctx.beginPath()
+        ctx.moveTo(verts[0].x, verts[0].y)
+        for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      }
+
+      // HEALTH BAR
       const pct = Math.max(0, Math.min(1, (p.health || 0) / (p.maxHealth || 1)))
       const barW = Math.max(30, r * 2)
       const barH = 6
@@ -328,14 +314,50 @@
       ctx.lineWidth = 1
       ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1)
 
-      // name label
+      // NAME
       const label = names.get(p.id) || `P-${String(p.id).slice(0, 4)}`
       ctx.lineWidth = 4
       ctx.strokeStyle = 'rgba(0,0,0,0.35)'
       ctx.strokeText(label, x, barY - 4)
       ctx.fillStyle = p.id === myId ? '#e6fff4' : '#f3f7ff'
       ctx.fillText(label, x, barY - 4)
+
+      // BARRELS (cosmetic)
+      if (tank?.barrels?.length) {
+        ctx.lineWidth = STROKE_W
+        ctx.fillStyle = '#9ca3af'
+        ctx.strokeStyle = '#4b5563'
+        for (const b of tank.barrels) {
+          const [len, wid, fwd, side, dir] = b
+          drawBarrel(x, y, len, wid, fwd, side, dir)
+        }
+      }
     }
+  }
+
+  function drawBarrel(cx, cy, len, wid, fwd, side, dir) {
+    const cos = Math.cos(dir), sin = Math.sin(dir)
+    const ox = cx + cos * fwd - sin * side
+    const oy = cy + sin * fwd + cos * side
+    const hx = (wid / 2) * -sin
+    const hy = (wid / 2) *  cos
+
+    const tipx = ox + cos * len
+    const tipy = oy + sin * len
+
+    const p1 = { x: ox + hx,  y: oy + hy }
+    const p2 = { x: ox - hx,  y: oy - hy }
+    const p3 = { x: tipx - hx, y: tipy - hy }
+    const p4 = { x: tipx + hx, y: tipy + hy }
+
+    ctx.beginPath()
+    ctx.moveTo(p1.x, p1.y)
+    ctx.lineTo(p2.x, p2.y)
+    ctx.lineTo(p3.x, p3.y)
+    ctx.lineTo(p4.x, p4.y)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
   }
 
   function drawAnnouncements() {
@@ -344,23 +366,14 @@
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
     ctx.font = '28px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-    const paddingX = 14
-    const paddingY = 8
     const text = announceText
-    const metrics = ctx.measureText(text)
-    const w = metrics.width + paddingX * 2
+    const w = ctx.measureText(text).width + 28
     const h = 40
     const x = (viewW - w) / 2
     const y = 18
-
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'
-    ctx.fillRect(x, y, w, h)
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)'
-    ctx.lineWidth = 2
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
-
-    ctx.fillStyle = '#ffffff'
-    ctx.fillText(text, viewW / 2, y + paddingY)
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x, y, w, h)
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 2; ctx.strokeRect(x+0.5, y+0.5, w-1, h-1)
+    ctx.fillStyle = '#ffffff'; ctx.fillText(text, viewW / 2, y + 8)
     ctx.restore()
   }
 
@@ -379,12 +392,10 @@
     ctx.restore()
   }
 
-  function drawDeathOverlay(me) {
-    if (!me || me.alive) return
+  function drawDeathOverlay() {
     ctx.save()
     ctx.fillStyle = 'rgba(0,0,0,0.55)'
     ctx.fillRect(0, 0, viewW, viewH)
-
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.font = 'bold 72px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
@@ -393,14 +404,37 @@
     ctx.lineWidth = 6
     ctx.strokeText('YOU DIED', viewW / 2, viewH / 2 - 10)
     ctx.fillText('YOU DIED', viewW / 2, viewH / 2 - 10)
-
     ctx.font = '20px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
     ctx.fillStyle = 'rgba(255,255,255,0.85)'
     ctx.fillText('Spectating until the battle ends…', viewW / 2, viewH / 2 + 36)
     ctx.restore()
   }
 
-  // World <-> Screen
+  /* ===== Geometry helpers (client-side draw) ===== */
+  function regularPolygonScreen(cx, cy, r, sides) {
+    const out = []
+    const rot = 0
+    for (let i = 0; i < sides; i++) {
+      const a = rot + (i * 2 * Math.PI) / sides
+      out.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r })
+    }
+    return out
+  }
+  function darker(hex, f = 0.6) {
+    const { r, g, b } = hexToRgb(hex)
+    const dr = Math.max(0, Math.floor(r * f))
+    const dg = Math.max(0, Math.floor(g * f))
+    const db = Math.max(0, Math.floor(b * f))
+    return `rgb(${dr},${dg},${db})`
+  }
+  function hexToRgb(hex) {
+    if (hex.startsWith('#')) hex = hex.slice(1)
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('')
+    const num = parseInt(hex, 16)
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 }
+  }
+
+  /* ===== World <-> Screen ===== */
   function worldToScreenX(wx) { return Math.floor(wx - camera.x + viewW / 2) }
   function worldToScreenY(wy) { return Math.floor(wy - camera.y + viewH / 2) }
 
@@ -414,4 +448,4 @@
 })()
 
 window.GameClient = GameClient
-console.log('[Client] GameClient ready (hi-res)')
+console.log('[Client] GameClient ready (hi-res + tanks)')
