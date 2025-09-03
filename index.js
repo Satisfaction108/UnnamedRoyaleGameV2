@@ -78,6 +78,15 @@ app.post('/api/login', async (req, res) => {
     if (!validUsername(username)) return res.status(400).json({ ok:false, error:'invalid_username' })
     const user = await readUser(username)
     if (!user || user.password !== password) return res.status(401).json({ ok:false, error:'bad_credentials' })
+    
+    // Update last login timestamp
+    user.lastLogin = Date.now()
+    try {
+      await writeUser(username, user)
+    } catch (e) {
+      console.warn('Failed to update last login on login:', e)
+    }
+    
     const sid = randomUUID()
     sessions.set(sid, { username })
     setCookie(res, 'sid', sid, { path:'/', httpOnly:true, maxAge:60*60*24*7, sameSite:'Lax' })
@@ -102,7 +111,27 @@ app.get('/api/me', async (req, res) => {
   const sess = requireAuth(req, res); if (!sess) return
   const user = await readUser(sess.username)
   if (!user) return res.status(401).json({ ok:false, error:'not_logged_in' })
-  res.json({ ok:true, username:user.username, premium:user.premium||'none', wins:user.wins||0, losses:user.losses||0, prisms:user.prisms||0 })
+  
+  // Update last login timestamp
+  user.lastLogin = Date.now()
+  try {
+    await writeUser(user.username, user)
+  } catch (e) {
+    console.warn('Failed to update last login:', e)
+  }
+  
+  res.json({ 
+    ok: true, 
+    username: user.username, 
+    premium: user.premium || 'none', 
+    wins: user.wins || 0, 
+    losses: user.losses || 0, 
+    prisms: user.prisms || 0,
+    joinDate: user.createdAt || user.joinDate,
+    lastLogin: user.lastLogin,
+    averageScore: user.averageScore || 0,
+    twoFactorEnabled: user.twoFactorEnabled || false
+  })
 })
 
 // change password for the logged-in user

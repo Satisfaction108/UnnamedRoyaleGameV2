@@ -3,65 +3,65 @@
 <head id="headRoot">
     <meta id="metaCharset" charset="utf-8">
     <meta id="metaViewport" name="viewport" content="width=device-width, initial-scale=1">
-    <title id="titleRoot">Unnamed Royale • Accounts</title>
+    <title id="titleRoot">Unnamed Royale ï¿½ Accounts</title>
     <link id="linkStyles" rel="stylesheet" href="styles.css">
 </head>
 <body id="bodyRoot">
     <div id="bgGrid"></div>
 
-    <main id="landing">
+    <main id="landing" role="main" aria-label="Landing page">
         <div id="landingInner">
             <h1 id="landingTitle">Unnamed Royale</h1>
-            <div id="landingButtons">
-                <button id="btnSignup" class="btnPrimary">Sign Up</button>
-                <button id="btnLogin" class="btnSecondary">Log In</button>
+            <div id="landingButtons" role="group" aria-label="Account actions">
+                <button id="btnSignup" class="btnPrimary" aria-describedby="landingTag">Sign Up</button>
+                <button id="btnLogin" class="btnSecondary" aria-describedby="landingTag">Log In</button>
             </div>
             <p id="landingTag">Fast. Clean. Futuristic.</p>
         </div>
     </main>
 
-    <section id="mainMenu" aria-hidden="true">
-        <header id="topBar">
-            <div id="brandMini">UR</div>
-            <button id="btnBattle" class="btnBattle">Battle</button>
-            <div id="userBadge" aria-live="polite"></div>
+    <section id="mainMenu" aria-hidden="true" role="main" aria-label="Main menu">
+        <header id="topBar" role="banner">
+            <div id="brandMini" aria-label="Unnamed Royale">UR</div>
+            <button id="btnBattle" class="btnBattle" aria-describedby="tankLabel">Battle</button>
+            <div id="userBadge" aria-live="polite" aria-label="Current user"></div>
         </header>
 
         <div id="mainContent">
-            <aside id="accountPanel">
+            <aside id="accountPanel" role="complementary" aria-label="Account information">
                 <div id="accountCard">
-                    <div id="accountTitle">Account</div>
+                    <h2 id="accountTitle">Account</h2>
                     <div id="accountRow">
                         <span id="accountLabel">Logged in as</span>
-                        <span id="accountName"></span>
+                        <span id="accountName" aria-live="polite"></span>
                     </div>
-                    <div id="accountActions">
-                        <button id="btnRefresh" class="btnTertiary">Refresh</button>
-                        <button id="btnLogout" class="btnGhost">Log Out</button>
+                    <div id="accountActions" role="group" aria-label="Account actions">
+                        <button id="btnRefresh" class="btnTertiary" aria-label="Refresh account data">Refresh</button>
+                        <button id="btnLogout" class="btnGhost" aria-label="Log out of account">Log Out</button>
                     </div>
-                    <div id="accountStats">
-                        <div id="statRow1"><span id="statLabel1">Wins</span><span id="statVal1">0</span></div>
-                        <div id="statRow2"><span id="statLabel2">Losses</span><span id="statVal2">0</span></div>
-                        <div id="statRow3"><span id="statLabel3">Prisms</span><span id="statVal3">0</span></div>
+                    <div id="accountStats" role="region" aria-label="Game statistics">
+                        <div id="statRow1"><span id="statLabel1">Wins</span><span id="statVal1" aria-live="polite">0</span></div>
+                        <div id="statRow2"><span id="statLabel2">Losses</span><span id="statVal2" aria-live="polite">0</span></div>
+                        <div id="statRow3"><span id="statLabel3">Prisms</span><span id="statVal3" aria-live="polite">0</span></div>
                     </div>
                 </div>
             </aside>
 
             <!-- centered tank picker; arrows docked to the sides -->
-            <section id="selectorWrap">
-                <div id="tankCard">
-                    <button id="prevTank" class="navArrow" aria-label="Previous">
-                        <svg id="svgPrev" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+            <section id="selectorWrap" role="region" aria-label="Tank selection">
+                <div id="tankCard" role="group" aria-label="Tank selector">
+                    <button id="prevTank" class="navArrow" aria-label="Previous tank" tabindex="0">
+                        <svg id="svgPrev" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" focusable="false">
                             <path id="svgPrevPath" d="M15.5 4.5L7.5 12l8 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                         </svg>
                     </button>
 
-                    <div id="tankSilhouette"></div>
-                    <div id="questionMark">?</div>
-                    <div id="tankLabel">Select your tank</div>
+                    <div id="tankSilhouette" aria-hidden="true"></div>
+                    <div id="questionMark" aria-hidden="true">?</div>
+                    <div id="tankLabel" aria-live="polite" aria-atomic="true">Select your tank</div>
 
-                    <button id="nextTank" class="navArrow" aria-label="Next">
-                        <svg id="svgNext" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+                    <button id="nextTank" class="navArrow" aria-label="Next tank" tabindex="0">
+                        <svg id="svgNext" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" focusable="false">
                             <path id="svgNextPath" d="M8.5 4.5L16.5 12l-8 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                         </svg>
                     </button>
@@ -73,53 +73,58 @@
     <div id="overlay" aria-hidden="true"></div>
 
     <!-- LOGIN -->
-    <dialog id="modalLogin">
+    <dialog id="modalLogin" role="dialog" aria-labelledby="loginTitle" aria-modal="true">
         <div id="modalLoginInner">
             <h2 id="loginTitle">Log In</h2>
-            <form id="loginForm" autocomplete="off">
+            <form id="loginForm" autocomplete="off" novalidate>
                 <div id="loginRowUser" class="fieldRow">
                     <label id="loginLabelUser" for="loginUsername">Username</label>
-                    <input id="loginUsername" type="text" maxlength="20" required>
+                    <input id="loginUsername" type="text" maxlength="20" required 
+                           aria-describedby="loginError" autocomplete="username">
                 </div>
                 <div id="loginRowPass" class="fieldRow">
                     <label id="loginLabelPass" for="loginPassword">Password</label>
-                    <input id="loginPassword" type="password" minlength="6" required>
+                    <input id="loginPassword" type="password" minlength="6" required 
+                           aria-describedby="loginError" autocomplete="current-password">
                 </div>
                 <div id="loginRowRemember" class="rememberRow">
                     <input id="loginRemember" type="checkbox" checked>
                     <label id="loginLabelRemember" for="loginRemember">Remember me on this device</label>
                 </div>
-                <div id="loginActions" class="modalActions">
+                <div id="loginActions" class="modalActions" role="group" aria-label="Login actions">
                     <button id="loginSubmit" class="btnPrimary" type="submit">Enter</button>
-                    <button id="loginCancel" class="btnGhost" type="button">Cancel</button>
+                    <button id="loginCancel" class="btnGhost" type="button" aria-label="Cancel login">Cancel</button>
                 </div>
-                <div id="loginError" class="formError" role="alert"></div>
+                <div id="loginError" class="formError" role="alert" aria-live="polite"></div>
             </form>
         </div>
     </dialog>
 
     <!-- SIGNUP -->
-    <dialog id="modalSignup">
+    <dialog id="modalSignup" role="dialog" aria-labelledby="signupTitle" aria-modal="true">
         <div id="modalSignupInner">
             <h2 id="signupTitle">Create Account</h2>
-            <form id="signupForm" autocomplete="off">
+            <form id="signupForm" autocomplete="off" novalidate>
                 <div id="signupRowUser" class="fieldRow">
                     <label id="signupLabelUser" for="signupUsername">Username</label>
-                    <input id="signupUsername" type="text" maxlength="20" required>
+                    <input id="signupUsername" type="text" maxlength="20" required 
+                           aria-describedby="signupError" autocomplete="username">
                 </div>
                 <div id="signupRowPass" class="fieldRow">
                     <label id="signupLabelPass" for="signupPassword">Password</label>
-                    <input id="signupPassword" type="password" minlength="6" required>
+                    <input id="signupPassword" type="password" minlength="6" required 
+                           aria-describedby="signupError" autocomplete="new-password">
                 </div>
                 <div id="signupRowPass2" class="fieldRow">
                     <label id="signupLabelPass2" for="signupConfirm">Confirm Password</label>
-                    <input id="signupConfirm" type="password" minlength="6" required>
+                    <input id="signupConfirm" type="password" minlength="6" required 
+                           aria-describedby="signupError" autocomplete="new-password">
                 </div>
-                <div id="signupActions" class="modalActions">
+                <div id="signupActions" class="modalActions" role="group" aria-label="Signup actions">
                     <button id="signupSubmit" class="btnPrimary" type="submit">Create</button>
-                    <button id="signupCancel" class="btnGhost" type="button">Cancel</button>
+                    <button id="signupCancel" class="btnGhost" type="button" aria-label="Cancel signup">Cancel</button>
                 </div>
-                <div id="signupError" class="formError" role="alert"></div>
+                <div id="signupError" class="formError" role="alert" aria-live="polite"></div>
             </form>
         </div>
     </dialog>
@@ -129,18 +134,18 @@
     <div id="notifyStack" aria-live="polite"></div>
 
     <!-- Queue Screen -->
-    <section id="queueScreen" hidden>
+    <section id="queueScreen" hidden role="main" aria-label="Matchmaking queue">
         <div id="queueInner">
             <h2 id="queueTitle">Matchmaking</h2>
-            <p id="queueInfo"><span id="queueCountNum">0</span> in queue</p>
-            <button id="btnQueueCancel" class="btnGhost">Cancel</button>
+            <p id="queueInfo" aria-live="polite"><span id="queueCountNum">0</span> in queue</p>
+            <button id="btnQueueCancel" class="btnGhost" aria-label="Cancel matchmaking">Cancel</button>
         </div>
     </section>
 
     <!-- Game View -->
-    <section id="gameView" hidden>
-        <canvas id="gameCanvas" width="1200" height="800"></canvas>
-        <button id="btnExitGame" class="btnGhost">Exit</button>
+    <section id="gameView" hidden role="main" aria-label="Game arena">
+        <canvas id="gameCanvas" width="1200" height="800" aria-label="Game battlefield" role="img"></canvas>
+        <button id="btnExitGame" class="btnGhost" aria-label="Exit current game">Exit</button>
     </section>
 
     <script id="scriptClient" src="client.js"></script>
