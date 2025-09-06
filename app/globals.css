@@ -1,0 +1,139 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Updated to futuristic color scheme with cyan, purple, and neon accents */
+  --background: #0a0a0f; /* Deep space background */
+  --foreground: #ffffff; /* White text */
+  --card: #1a1a2e; /* Dark card background with blue tint */
+  --card-foreground: #ecfeff; /* Light cyan text */
+  --popover: rgba(22, 78, 99, 0.95); /* Cyan popover with transparency */
+  --popover-foreground: #ffffff; /* White popover text */
+  --primary: #164e63; /* Cyan primary */
+  --primary-foreground: #ffffff; /* White on primary */
+  --secondary: #6b5ce6; /* Purple secondary */
+  --secondary-foreground: #ffffff; /* White on secondary */
+  --muted: #16213e; /* Muted blue-gray */
+  --muted-foreground: #94a3b8; /* Light slate text */
+  --accent: #6b5ce6; /* Purple accent */
+  --accent-foreground: #ffffff; /* White on accent */
+  --destructive: #dc2626; /* Red for destructive */
+  --destructive-foreground: #ffffff; /* White on destructive */
+  --border: #334155; /* Slate border */
+  --input: #1e293b; /* Dark input background */
+  --ring: rgba(22, 78, 99, 0.6); /* Cyan focus ring */
+  --chart-1: #6b5ce6;
+  --chart-2: #164e63;
+  --chart-3: #d97706;
+  --chart-4: #dc2626;
+  --chart-5: #f59e0b;
+  --radius: 0.75rem; /* Increased radius for futuristic look */
+  --sidebar: #0f172a; /* Dark sidebar */
+  --sidebar-foreground: #ecfeff; /* Light cyan sidebar text */
+  --sidebar-primary: #164e63; /* Cyan sidebar primary */
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #6b5ce6; /* Purple sidebar accent */
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #334155; /* Slate sidebar border */
+  --sidebar-ring: rgba(22, 78, 99, 0.6);
+}
+
+.dark {
+  /* Same futuristic colors for dark mode consistency */
+  --background: #0a0a0f;
+  --foreground: #ffffff;
+  --card: #1a1a2e;
+  --card-foreground: #ecfeff;
+  --popover: rgba(22, 78, 99, 0.95);
+  --popover-foreground: #ffffff;
+  --primary: #164e63;
+  --primary-foreground: #ffffff;
+  --secondary: #6b5ce6;
+  --secondary-foreground: #ffffff;
+  --muted: #16213e;
+  --muted-foreground: #94a3b8;
+  --accent: #6b5ce6;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #334155;
+  --input: #1e293b;
+  --ring: rgba(22, 78, 99, 0.6);
+  --chart-1: #6b5ce6;
+  --chart-2: #164e63;
+  --chart-3: #d97706;
+  --chart-4: #dc2626;
+  --chart-5: #f59e0b;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #ecfeff;
+  --sidebar-primary: #164e63;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #6b5ce6;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #334155;
+  --sidebar-ring: rgba(22, 78, 99, 0.6);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Added subtle gradient background for futuristic feel */
+    background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+  }
+}
+
+/* Added futuristic glow effects */
+.glow-effect {
+  box-shadow: 0 0 20px rgba(22, 78, 99, 0.3);
+}
+
+.neon-border {
+  border: 1px solid rgba(22, 78, 99, 0.5);
+  box-shadow: 0 0 10px rgba(22, 78, 99, 0.2);
+}

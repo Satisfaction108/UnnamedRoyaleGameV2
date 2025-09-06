@@ -1,0 +1,15 @@
+{
+  "username": "WarriorX123",
+  "password": "WarriorX123!!",
+  "createdAt": "2025-09-05T22:45:11.348Z",
+  "lastLogin": "2025-09-06T00:15:18.535Z",
+  "level": 1,
+  "gamesPlayed": 0,
+  "wins": 0,
+  "settings": {
+    "rememberMe": true,
+    "notifications": true,
+    "soundEnabled": true
+  },
+  "lastPasswordChange": "2025-09-05T23:24:18.003Z"
+}
