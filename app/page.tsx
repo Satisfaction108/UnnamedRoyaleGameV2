@@ -29,7 +29,7 @@ import {
 
 const DiscordIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.077.077 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.077.077 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
   </svg>
 )
 
@@ -39,18 +39,34 @@ export default function HomePage() {
   const [showSettings, setShowSettings] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [showThemes, setShowThemes] = useState(false)
+  const [currentTheme, setCurrentTheme] = useState("default")
   const [isLoading, setIsLoading] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [selectedServer, setSelectedServer] = useState("1v1")
   const { toast } = useToast()
 
-  const [showSignUpPassword, setShowSignUpPassword] = useState(false)
-  const [showSignUpConfirmPassword, setShowSignUpConfirmPassword] = useState(false)
-  const [showLoginPassword, setShowLoginPassword] = useState(false)
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
-  const [showNewPassword, setShowNewPassword] = useState(false)
-  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false)
+  const [
+    showSignUpPassword,
+    showSignUpConfirmPassword,
+    showLoginPassword,
+    showCurrentPassword,
+    showNewPassword,
+    showConfirmNewPassword,
+  ] = [useState(false), useState(false), useState(false), useState(false), useState(false), useState(false)].map(
+    (s) => s[0],
+  )
+  const [
+    setShowSignUpPassword,
+    setShowSignUpConfirmPassword,
+    setShowLoginPassword,
+    setShowCurrentPassword,
+    setShowNewPassword,
+    setShowConfirmNewPassword,
+  ] = [useState(false), useState(false), useState(false), useState(false), useState(false), useState(false)].map(
+    (s) => s[1],
+  )
 
   const [signUpData, setSignUpData] = useState({
     username: "",
@@ -72,6 +88,200 @@ export default function HomePage() {
   const [systemStatus, setSystemStatus] = useState("ONLINE")
   const [playerStatus, setPlayerStatus] = useState("READY")
   const [battleReadiness, setBattleReadiness] = useState(85)
+
+  const themes = {
+    default: {
+      name: "Default",
+      colors: {
+        background: "#3B0E59",
+        primary: "#C729F2",
+        secondary: "#7B17A6",
+        accent: "#13DCF2",
+        text: "#ffffff",
+        card: "#0B2740",
+        destructive: "#ff4444",
+        warning: "#ffaa00",
+        success: "#00ff88",
+        muted: "#7B17A6",
+        mutedForeground: "#cccccc",
+        border: "#C729F2",
+      },
+    },
+    night: {
+      name: "Night",
+      colors: {
+        background: "#0a0a0a",
+        primary: "#1e90ff",
+        secondary: "#ff4500",
+        accent: "#32cd32",
+        text: "#ffffff",
+        card: "#1a1a1a",
+        destructive: "#ff4444",
+        warning: "#ffaa00",
+        success: "#32cd32",
+        muted: "#333333",
+        mutedForeground: "#cccccc",
+        border: "#1e90ff",
+      },
+    },
+    forest: {
+      name: "Forest",
+      colors: {
+        background: "#0d1f14",
+        primary: "#2e8b57",
+        secondary: "#556b2f",
+        accent: "#8fbc8f",
+        text: "#e0ffe0",
+        card: "#1a2f1f",
+        destructive: "#ff6b6b",
+        warning: "#ffd93d",
+        success: "#6bcf7f",
+        muted: "#2d4a32",
+        mutedForeground: "#b8d8b8",
+        border: "#2e8b57",
+      },
+    },
+    neon: {
+      name: "Neon",
+      colors: {
+        background: "#0b0b0b",
+        primary: "#39ff14",
+        secondary: "#ff00ff",
+        accent: "#00f9ff",
+        text: "#ffffff",
+        card: "#1a1a1a",
+        destructive: "#ff073a",
+        warning: "#ffff00",
+        success: "#39ff14",
+        muted: "#333333",
+        mutedForeground: "#cccccc",
+        border: "#39ff14",
+      },
+    },
+    desert: {
+      name: "Desert",
+      colors: {
+        background: "#f4e1b5",
+        primary: "#8b4513",
+        secondary: "#cd853f",
+        accent: "#daa520",
+        text: "#2f1b14",
+        card: "#f0d090",
+        destructive: "#cc4125",
+        warning: "#ff8c00",
+        success: "#228b22",
+        muted: "#e6d4a7",
+        mutedForeground: "#5d4e37",
+        border: "#8b4513",
+      },
+    },
+    ocean: {
+      name: "Ocean",
+      colors: {
+        background: "#001f3f",
+        primary: "#0074d9",
+        secondary: "#7fdbff",
+        accent: "#39cccc",
+        text: "#f0f8ff",
+        card: "#003366",
+        destructive: "#ff4136",
+        warning: "#ffdc00",
+        success: "#2ecc40",
+        muted: "#004080",
+        mutedForeground: "#b3d9ff",
+        border: "#0074d9",
+      },
+    },
+    lava: {
+      name: "Lava",
+      colors: {
+        background: "#1a0000",
+        primary: "#ff4500",
+        secondary: "#ff6347",
+        accent: "#ffd700",
+        text: "#fff5e6",
+        card: "#330000",
+        destructive: "#ff0000",
+        warning: "#ff8c00",
+        success: "#32cd32",
+        muted: "#4d0000",
+        mutedForeground: "#ffccb3",
+        border: "#ff4500",
+      },
+    },
+    candy: {
+      name: "Candy",
+      colors: {
+        background: "#fff0f5",
+        primary: "#ff1493",
+        secondary: "#ff69b4",
+        accent: "#dda0dd",
+        text: "#8b008b",
+        card: "#ffe4e1",
+        destructive: "#dc143c",
+        warning: "#ff8c00",
+        success: "#32cd32",
+        muted: "#f8e8ee",
+        mutedForeground: "#8b4789",
+        border: "#ff1493",
+      },
+    },
+    pork: {
+      name: "Pork",
+      colors: {
+        background: "#fff5f5",
+        primary: "#dc143c",
+        secondary: "#ff6666",
+        accent: "#ffb6c1",
+        text: "#8b0000",
+        card: "#ffeeee",
+        destructive: "#b22222",
+        warning: "#ff8c00",
+        success: "#228b22",
+        muted: "#ffe8e8",
+        mutedForeground: "#a0522d",
+        border: "#dc143c",
+      },
+    },
+  }
+
+  const applyTheme = (themeName: string) => {
+    const theme = themes[themeName]
+    if (!theme) return
+
+    const root = document.documentElement
+    root.style.setProperty("--background", theme.colors.background)
+    root.style.setProperty("--primary", theme.colors.primary)
+    root.style.setProperty("--secondary", theme.colors.secondary)
+    root.style.setProperty("--accent", theme.colors.accent)
+    root.style.setProperty("--foreground", theme.colors.text)
+    root.style.setProperty("--card", theme.colors.card)
+    root.style.setProperty("--card-foreground", theme.colors.text)
+    root.style.setProperty("--muted", theme.colors.muted)
+    root.style.setProperty("--muted-foreground", theme.colors.mutedForeground)
+    root.style.setProperty("--border", theme.colors.border)
+    root.style.setProperty("--destructive", theme.colors.destructive)
+    root.style.setProperty("--warning", theme.colors.warning)
+    root.style.setProperty("--success", theme.colors.success)
+
+    root.style.setProperty("--sidebar-background", theme.colors.card)
+    root.style.setProperty("--sidebar-foreground", theme.colors.text)
+    root.style.setProperty("--sidebar-border", theme.colors.border)
+    root.style.setProperty("--sidebar-accent", theme.colors.muted)
+    root.style.setProperty("--sidebar-primary", theme.colors.primary)
+    root.style.setProperty("--input", theme.colors.card)
+    root.style.setProperty("--input-foreground", theme.colors.text)
+    root.style.setProperty("--popover-background", theme.colors.card)
+    root.style.setProperty("--popover-foreground", theme.colors.text)
+
+    setCurrentTheme(themeName)
+    localStorage.setItem("selectedTheme", themeName)
+  }
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("selectedTheme") || "default"
+    applyTheme(savedTheme)
+  }, [])
 
   // Password strength calculation
   const calculatePasswordStrength = (password: string) => {
@@ -296,74 +506,58 @@ export default function HomePage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [changelogOpen, setChangelogOpen] = useState(false)
 
-  if (isAuthenticated && currentUser) {
+  const isLoggedIn = isAuthenticated && currentUser
+
+  if (isLoggedIn) {
     return (
-      <div className="min-h-screen bg-background text-foreground">
-        <header className="border-b border-border/50 bg-card/30 backdrop-blur-md relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5"></div>
-          <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
-
-          <div className="container mx-auto px-4 py-4 relative z-10">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-6">
-                <div className="flex items-center space-x-4">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSettingsOpen(true)}
-                    className="h-12 w-12 border-2 border-primary/30 bg-card/50 hover:bg-primary/20 hover:border-primary/50 transition-all duration-300 relative group"
-                  >
-                    <Settings className="h-6 w-6 text-primary group-hover:rotate-90 transition-transform duration-300" />
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full animate-pulse"></div>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => window.open("https://discord.gg/JBWqcHWjg2", "_blank")}
-                    className="h-12 w-12 border-2 border-accent/30 bg-card/50 hover:bg-accent/20 hover:border-accent/50 transition-all duration-300 relative group"
-                  >
-                    <DiscordIcon className="h-6 w-6 text-accent group-hover:scale-110 transition-transform duration-300" />
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-pulse"></div>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setChangelogOpen(true)}
-                    className="h-12 w-12 border-2 border-primary/30 bg-card/50 hover:bg-primary/20 hover:border-primary/50 transition-all duration-300 relative group"
-                  >
-                    <FileText className="h-6 w-6 text-primary group-hover:scale-110 transition-transform duration-300" />
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full animate-pulse"></div>
-                  </Button>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background/95 to-card/50 relative overflow-hidden">
+        {/* HUD Header */}
+        <div className="relative z-40 p-6 border-b border-primary/30 bg-card/20 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSettingsOpen(true)}
+                className="h-12 w-12 border-2 border-primary/50 bg-card/70 hover:bg-primary/30 hover:border-primary/80 transition-all duration-300 relative group shadow-lg hover:shadow-primary/20"
+              >
+                <Settings className="h-6 w-6 text-primary group-hover:rotate-90 transition-transform duration-300 drop-shadow-lg" />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full animate-pulse shadow-lg"></div>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => window.open("https://discord.gg/JBWqcHWjg2", "_blank")}
+                className="h-12 w-12 border-2 border-accent/50 bg-card/70 hover:bg-accent/30 hover:border-accent/80 transition-all duration-300 relative group shadow-lg hover:shadow-accent/20"
+              >
+                <DiscordIcon className="h-6 w-6 text-accent group-hover:scale-110 transition-transform duration-300 drop-shadow-lg" />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-pulse shadow-lg"></div>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setChangelogOpen(true)}
+                className="h-12 w-12 border-2 border-primary/50 bg-card/70 hover:bg-primary/30 hover:border-primary/80 transition-all duration-300 relative group shadow-lg hover:shadow-primary/20"
+              >
+                <FileText className="h-6 w-6 text-primary group-hover:scale-110 transition-transform duration-300 drop-shadow-lg" />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full animate-pulse shadow-lg"></div>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowThemes(true)}
+                className="h-12 w-12 border-2 border-secondary/50 bg-card/70 hover:bg-secondary/30 hover:border-secondary/80 transition-all duration-300 relative group shadow-lg hover:shadow-secondary/20"
+              >
+                <div className="h-6 w-6 relative">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary via-accent to-secondary rounded-full animate-pulse"></div>
+                  <div className="absolute inset-1 bg-card rounded-full"></div>
+                  <div className="absolute inset-2 bg-gradient-to-br from-primary via-accent to-secondary rounded-full"></div>
                 </div>
-              </div>
-
-              <div className="flex items-center space-x-8">
-                <div className="text-center">
-                  <div className="text-xs font-mono text-muted-foreground tracking-wider">PLAYER</div>
-                  <div className="text-lg font-mono font-bold text-primary tracking-wider">
-                    {currentUser.username.toUpperCase()}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs font-mono text-muted-foreground tracking-wider">STATUS</div>
-                  <div className="text-sm font-mono font-bold text-accent tracking-wider flex items-center">
-                    <div className="w-2 h-2 bg-accent rounded-full mr-2 animate-pulse"></div>
-                    {playerStatus}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs font-mono text-muted-foreground tracking-wider">SYSTEM</div>
-                  <div className="text-sm font-mono font-bold text-primary tracking-wider flex items-center">
-                    <div className="w-2 h-2 bg-primary rounded-full mr-2 animate-pulse"></div>
-                    {systemStatus}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-4"></div>
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-secondary rounded-full animate-pulse shadow-lg"></div>
+              </Button>
             </div>
           </div>
-        </header>
+        </div>
 
         <div className="container mx-auto px-4 py-8">
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -544,57 +738,91 @@ export default function HomePage() {
         </div>
 
         <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <SheetContent side="left" className="w-[480px] bg-sidebar border-sidebar-border">
+          <SheetContent
+            side="left"
+            className="w-[480px]"
+            style={{
+              backgroundColor: "hsl(var(--sidebar-background))",
+              borderColor: "hsl(var(--sidebar-border))",
+              color: "hsl(var(--sidebar-foreground))",
+            }}
+          >
             <SheetHeader className="px-2">
-              <SheetTitle className="text-sidebar-foreground">Settings</SheetTitle>
-              <SheetDescription className="text-sidebar-foreground/70">
+              <SheetTitle style={{ color: "hsl(var(--sidebar-foreground))" }}>Settings</SheetTitle>
+              <SheetDescription style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }}>
                 Manage your account and preferences
               </SheetDescription>
             </SheetHeader>
             <Tabs defaultValue="account" className="mt-6 px-2">
-              <TabsList className="grid w-full grid-cols-2 bg-sidebar-accent">
-                <TabsTrigger value="account" className="data-[state=active]:bg-sidebar-primary">
+              <TabsList className="grid w-full grid-cols-2" style={{ backgroundColor: "hsl(var(--sidebar-accent))" }}>
+                <TabsTrigger
+                  value="account"
+                  className="data-[state=active]:text-white"
+                  style={
+                    {
+                      color: "hsl(var(--sidebar-foreground))",
+                      "--tw-data-state-active-bg": "hsl(var(--sidebar-primary))",
+                    } as any
+                  }
+                >
                   Account
                 </TabsTrigger>
-                <TabsTrigger value="logout" className="data-[state=active]:bg-sidebar-primary">
+                <TabsTrigger
+                  value="logout"
+                  className="data-[state=active]:text-white"
+                  style={
+                    {
+                      color: "hsl(var(--sidebar-foreground))",
+                      "--tw-data-state-active-bg": "hsl(var(--sidebar-primary))",
+                    } as any
+                  }
+                >
                   Logout
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="account" className="space-y-4 mt-4">
                 <div className="space-y-4 px-2">
                   <div>
-                    <h3 className="text-lg font-semibold mb-3 text-sidebar-foreground">Account Details</h3>
+                    <h3 className="text-lg font-semibold mb-3" style={{ color: "hsl(var(--sidebar-foreground))" }}>
+                      Account Details
+                    </h3>
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between items-center">
-                        <span className="text-sidebar-foreground/70">Username:</span>
-                        <span className="font-medium text-sidebar-foreground">{currentUser.username}</span>
+                        <span style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }}>Username:</span>
+                        <span className="font-medium" style={{ color: "hsl(var(--sidebar-foreground))" }}>
+                          {currentUser.username}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sidebar-foreground/70">Level:</span>
+                        <span style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }}>Level:</span>
                         <Badge variant="secondary">{currentUser.level}</Badge>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sidebar-foreground/70">Member since:</span>
-                        <span className="text-sidebar-foreground">
+                        <span style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }}>Member since:</span>
+                        <span style={{ color: "hsl(var(--sidebar-foreground))" }}>
                           {new Date(currentUser.createdAt).toLocaleDateString()}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sidebar-foreground/70">Games played:</span>
-                        <span className="text-sidebar-foreground">{currentUser.gamesPlayed}</span>
+                        <span style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }}>Games played:</span>
+                        <span style={{ color: "hsl(var(--sidebar-foreground))" }}>{currentUser.gamesPlayed}</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sidebar-foreground/70">Wins:</span>
-                        <span className="text-primary font-semibold">{currentUser.wins}</span>
+                        <span style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }}>Wins:</span>
+                        <span className="font-semibold" style={{ color: "hsl(var(--primary))" }}>
+                          {currentUser.wins}
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="border-t border-sidebar-border pt-4">
-                    <h3 className="text-lg font-semibold mb-3 text-sidebar-foreground">Reset Password</h3>
+                  <div className="border-t pt-4" style={{ borderColor: "hsl(var(--sidebar-border))" }}>
+                    <h3 className="text-lg font-semibold mb-3" style={{ color: "hsl(var(--sidebar-foreground))" }}>
+                      Reset Password
+                    </h3>
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <Label htmlFor="current-password" className="text-sidebar-foreground">
+                        <Label htmlFor="current-password" style={{ color: "hsl(var(--sidebar-foreground))" }}>
                           Current Password
                         </Label>
                         <div className="relative">
@@ -606,7 +834,12 @@ export default function HomePage() {
                             onChange={(e) =>
                               setResetPasswordData((prev) => ({ ...prev, currentPassword: e.target.value }))
                             }
-                            className="bg-input border-sidebar-border text-sidebar-foreground pr-10"
+                            className="pr-10"
+                            style={{
+                              backgroundColor: "hsl(var(--input))",
+                              borderColor: "hsl(var(--sidebar-border))",
+                              color: "hsl(var(--sidebar-foreground))",
+                            }}
                           />
                           <Button
                             type="button"
@@ -616,15 +849,15 @@ export default function HomePage() {
                             onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                           >
                             {showCurrentPassword ? (
-                              <EyeOff className="h-4 w-4 text-sidebar-foreground/70" />
+                              <EyeOff className="h-4 w-4" style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }} />
                             ) : (
-                              <Eye className="h-4 w-4 text-sidebar-foreground/70" />
+                              <Eye className="h-4 w-4" style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }} />
                             )}
                           </Button>
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="new-password" className="text-sidebar-foreground">
+                        <Label htmlFor="new-password" style={{ color: "hsl(var(--sidebar-foreground))" }}>
                           New Password
                         </Label>
                         <div className="relative">
@@ -634,7 +867,12 @@ export default function HomePage() {
                             placeholder="Enter new password"
                             value={resetPasswordData.newPassword}
                             onChange={(e) => setResetPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
-                            className="bg-input border-sidebar-border text-sidebar-foreground pr-10"
+                            className="pr-10"
+                            style={{
+                              backgroundColor: "hsl(var(--input))",
+                              borderColor: "hsl(var(--sidebar-border))",
+                              color: "hsl(var(--sidebar-foreground))",
+                            }}
                           />
                           <Button
                             type="button"
@@ -644,16 +882,16 @@ export default function HomePage() {
                             onClick={() => setShowNewPassword(!showNewPassword)}
                           >
                             {showNewPassword ? (
-                              <EyeOff className="h-4 w-4 text-sidebar-foreground/70" />
+                              <EyeOff className="h-4 w-4" style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }} />
                             ) : (
-                              <Eye className="h-4 w-4 text-sidebar-foreground/70" />
+                              <Eye className="h-4 w-4" style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }} />
                             )}
                           </Button>
                         </div>
                         {resetPasswordData.newPassword && (
                           <div className="space-y-2">
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-sidebar-foreground/70">Password Strength:</span>
+                              <span style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }}>Password Strength:</span>
                               <Badge variant={resetPasswordStrength >= 75 ? "default" : "secondary"}>
                                 {getStrengthText(resetPasswordStrength)}
                               </Badge>
@@ -663,7 +901,7 @@ export default function HomePage() {
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="confirm-new-password" className="text-sidebar-foreground">
+                        <Label htmlFor="confirm-new-password" style={{ color: "hsl(var(--sidebar-foreground))" }}>
                           Confirm New Password
                         </Label>
                         <div className="relative">
@@ -675,7 +913,12 @@ export default function HomePage() {
                             onChange={(e) =>
                               setResetPasswordData((prev) => ({ ...prev, confirmNewPassword: e.target.value }))
                             }
-                            className="bg-input border-sidebar-border text-sidebar-foreground pr-10"
+                            className="pr-10"
+                            style={{
+                              backgroundColor: "hsl(var(--input))",
+                              borderColor: "hsl(var(--sidebar-border))",
+                              color: "hsl(var(--sidebar-foreground))",
+                            }}
                           />
                           <Button
                             type="button"
@@ -685,9 +928,9 @@ export default function HomePage() {
                             onClick={() => setShowConfirmNewPassword(!showConfirmNewPassword)}
                           >
                             {showConfirmNewPassword ? (
-                              <EyeOff className="h-4 w-4 text-sidebar-foreground/70" />
+                              <EyeOff className="h-4 w-4" style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }} />
                             ) : (
-                              <Eye className="h-4 w-4 text-sidebar-foreground/70" />
+                              <Eye className="h-4 w-4" style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }} />
                             )}
                           </Button>
                         </div>
@@ -704,7 +947,11 @@ export default function HomePage() {
                           )}
                       </div>
                       <Button
-                        className="w-full bg-sidebar-primary hover:bg-sidebar-primary/80"
+                        className="w-full"
+                        style={{
+                          backgroundColor: "hsl(var(--sidebar-primary))",
+                          color: "white",
+                        }}
                         disabled={
                           !resetPasswordData.currentPassword ||
                           !resetPasswordData.newPassword ||
@@ -727,10 +974,10 @@ export default function HomePage() {
                     <AlertTriangle className="h-12 w-12 text-destructive" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold mb-2 text-sidebar-foreground">
+                    <h3 className="text-lg font-semibold mb-2" style={{ color: "hsl(var(--sidebar-foreground))" }}>
                       Are you sure you want to logout?
                     </h3>
-                    <p className="text-sm text-sidebar-foreground/70">
+                    <p className="text-sm" style={{ color: "hsl(var(--sidebar-foreground) / 0.7)" }}>
                       You will need to login again to access your account.
                     </p>
                   </div>
@@ -741,7 +988,12 @@ export default function HomePage() {
                     </Button>
                     <Button
                       variant="outline"
-                      className="w-full bg-transparent border-sidebar-border text-sidebar-foreground hover:bg-sidebar-accent"
+                      className="w-full hover:bg-opacity-20 bg-transparent"
+                      style={{
+                        backgroundColor: "transparent",
+                        borderColor: "hsl(var(--sidebar-border))",
+                        color: "hsl(var(--sidebar-foreground))",
+                      }}
                       onClick={() => setSettingsOpen(false)}
                     >
                       Cancel
@@ -770,6 +1022,63 @@ export default function HomePage() {
                 <h4 className="font-semibold mb-2 text-card-foreground">Beta Testing Released</h4>
                 <p className="text-sm text-muted-foreground">The game is released as a beta version.</p>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showThemes} onOpenChange={setShowThemes}>
+          <DialogContent className="sm:max-w-md bg-background/95 backdrop-blur-sm border-primary/30">
+            <DialogHeader>
+              <DialogTitle className="text-foreground font-mono tracking-wider">THEME SELECTOR</DialogTitle>
+              <DialogDescription className="text-muted-foreground font-mono">
+                Choose your battle interface theme
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-3 gap-3 py-4">
+              {Object.entries(themes).map(([key, theme]) => {
+                const isSelected = currentTheme === key
+                const buttonBg = isSelected ? theme.colors.primary : "transparent"
+                const textColor = isSelected
+                  ? theme.colors.primary === "#FFFFFF" ||
+                    theme.colors.primary === "#F2FFE3" ||
+                    theme.colors.primary === "#FFB6C1"
+                    ? "#000000"
+                    : "#FFFFFF"
+                  : "#FFFFFF"
+
+                return (
+                  <Button
+                    key={key}
+                    variant={isSelected ? "default" : "outline"}
+                    onClick={() => applyTheme(key)}
+                    className="h-20 flex flex-col items-center justify-center space-y-2 relative overflow-hidden group border-2"
+                    style={{
+                      backgroundColor: buttonBg,
+                      borderColor: theme.colors.primary,
+                      color: textColor,
+                    }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full border-2 relative"
+                      style={{
+                        background: `linear-gradient(45deg, ${theme.colors.primary}, ${theme.colors.accent})`,
+                        borderColor: theme.colors.secondary,
+                      }}
+                    >
+                      <div
+                        className="absolute inset-1 rounded-full"
+                        style={{ backgroundColor: theme.colors.background }}
+                      ></div>
+                    </div>
+                    <span className="text-xs font-mono font-bold tracking-wider" style={{ color: textColor }}>
+                      {theme.name.toUpperCase()}
+                    </span>
+                    {isSelected && (
+                      <div className="absolute inset-0 border-2 border-accent animate-pulse rounded-md"></div>
+                    )}
+                  </Button>
+                )
+              })}
             </div>
           </DialogContent>
         </Dialog>
