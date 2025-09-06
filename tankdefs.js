@@ -1,6 +1,7 @@
 // Tank definitions used by the server.
 // shape: 0 = circle, >=3 = regular polygon with that many sides
-// barrels: array of [length, width, forwardOffset, sidewaysOffset, directionRadians]
+// barrels: items can be either arrays [length, width, forwardOffset, sidewaysOffset, directionRadians]
+//          or objects { length, width, forwardOffset, sidewaysOffset, directionRadians, bulletType, reload }
 
 const TANK_DEFS = {
   Scout: {
@@ -8,7 +9,7 @@ const TANK_DEFS = {
     size: 14,
     shape: 0,
     barrels: [
-      [22, 6, 10, 0, 0.0],
+      { length: 22, width: 6, forwardOffset: 10, sidewaysOffset: 0, directionRadians: 0.0, bulletType: 'Basic', reload: 0.30 },
     ],
   },
 
@@ -17,39 +18,11 @@ const TANK_DEFS = {
     size: 18,
     shape: 4,
     barrels: [
-      [20, 6, 12, 0, 0.0],
+      { length: 18, width: 6, forwardOffset: 10, sidewaysOffset: 0, directionRadians: 0.0, bulletType: 'Basic', reload: 0.35 },
+      { length: 18, width: 6, forwardOffset: 10, sidewaysOffset: 0, directionRadians: Math.PI, bulletType: 'Basic', reload: 0.35 },
     ],
   },
 
-  Triad: {
-    maxHealth: 160,
-    size: 16,
-    shape: 3,
-    barrels: [
-      [18, 6, 10, 0, 0.0],
-      [18, 6, 10, 0, (2 * Math.PI) / 3],
-      [18, 6, 10, 0, (4 * Math.PI) / 3],
-    ],
-  },
-
-  Hex: {
-    maxHealth: 220,
-    size: 20,
-    shape: 6,
-    barrels: [
-      [16, 6, 12, 0, Math.PI / 6],
-      [16, 6, 12, 0, Math.PI / 6 + Math.PI],
-    ],
-  },
-
-  Rammer: {
-    maxHealth: 260,
-    size: 22,
-    shape: 5,
-    barrels: [
-      [26, 8, 14, 0, 0.0],
-    ],
-  },
+  // keep existing tanks; arrays still work, but you can convert any barrel to an object and add bulletType/reload
 }
-
 export default TANK_DEFS

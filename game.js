@@ -1,5 +1,6 @@
 ﻿import { randomUUID } from 'node:crypto'
 import TANK_DEFS from './tankdefs.js'
+import BULLET_DEFS from './bulletdefs.js'
 
 export default class Game {
   constructor(players) {
@@ -7,8 +8,8 @@ export default class Game {
     this.players = players
     this.bounds = { w: 1200, h: 800 }
     this.speed = 300
-    this.state = new Map()  // id -> player state
-    this.inputs = new Map() // id -> {w,a,s,d}
+    this.state = new Map()
+    this.inputs = new Map()
     this.closed = false
     this.finishing = false
 
@@ -23,17 +24,29 @@ export default class Game {
     }))
 
     const tankKeys = Object.keys(TANK_DEFS)
+    function normBarrel(b) {
+      if (Array.isArray(b)) {
+        const [length, width, forwardOffset, sidewaysOffset, directionRadians] = b
+        return { length, width, forwardOffset, sidewaysOffset, directionRadians, bulletType: 'Basic', reload: 0.30 }
+      }
+      const nb = { ...b }
+      nb.bulletType = nb.bulletType || 'Basic'
+      nb.reload = typeof nb.reload === 'number' ? nb.reload : 0.30
+      return nb
+    }
 
-    // initialize players
+    this.bullets = []
+    this._bulletSeq = 1
+
     players.forEach((p, i) => {
       const tk = tankKeys[Math.floor(Math.random() * tankKeys.length)]
       const def = TANK_DEFS[tk]
       const bodyDamage = Math.round(20 + def.size * 3)
-
+      const barrels = (def.barrels || []).map(normBarrel)
       this.state.set(p.id, {
         x: spawn[i % spawn.length].x,
         y: spawn[i % spawn.length].y,
-        rot: 0, // radians, facing +X
+        rot: 0,
         size: def.size,
         health: def.maxHealth,
         maxHealth: def.maxHealth,
@@ -41,12 +54,12 @@ export default class Game {
         alive: true,
         tankId: tk,
         shape: def.shape,
-        barrels: def.barrels,
+        barrels,
+        reloadTimers: new Array(barrels.length).fill(0),
       })
       this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
     })
 
-    // send match start info (+ tanks)
     const tanksForPlayers = players.map(p => {
       const st = this.state.get(p.id)
       return {
@@ -69,8 +82,6 @@ export default class Game {
       p.ws.on('message', (msg) => {
         try {
           const d = JSON.parse(msg)
-
-          // keyboard movement input
           if (d.type === 'input' && this.inputs.has(p.id)) {
             const st = this.state.get(p.id)
             if (!st?.alive) return
@@ -80,16 +91,16 @@ export default class Game {
             if (typeof d.s === 'boolean') inp.s = d.s
             if (typeof d.d === 'boolean') inp.d = d.d
           }
-
-          // mouse aim (rotation in radians)
           if (d.type === 'aim') {
             const st = this.state.get(p.id)
             if (!st?.alive) return
-            if (typeof d.angle === 'number' && Number.isFinite(d.angle)) {
-              st.rot = normalizeAngle(d.angle)
-            }
+            if (typeof d.angle === 'number' && Number.isFinite(d.angle)) st.rot = normalizeAngle(d.angle)
           }
-
+          if (d.type === 'shoot') {
+            const st = this.state.get(p.id)
+            if (!st?.alive) return
+            this._shootFromTank(p.id, st)
+          }
           if (d.type === 'leaveGame') this.end('left')
         } catch {}
       })
@@ -100,15 +111,60 @@ export default class Game {
     this.loop = setInterval(() => this.tick(), 1000 / 30)
   }
 
+  _spawnBullet(ownerId, x, y, angle, spec, width) {
+    const bspec = BULLET_DEFS[spec] || BULLET_DEFS.Basic
+    const speed = bspec.speed
+    const cos = Math.cos(angle), sin = Math.sin(angle)
+    const r = Math.max(2, (width || 6) * 0.4)
+    const b = {
+      id: this._bulletSeq++,
+      ownerId,
+      x, y,
+      vx: cos * speed,
+      vy: sin * speed,
+      r,
+      damage: bspec.damage,
+      health: bspec.health,
+      bornAt: Date.now(),
+      life: 0,
+      maxLife: 3.0,
+    }
+    this.bullets.push(b)
+  }
+
+  _shootFromTank(pid, st) {
+    for (let i = 0; i < st.barrels.length; i++) {
+      if (st.reloadTimers[i] > 0) continue
+      const b = st.barrels[i]
+      const dir = (st.rot || 0) + (b.directionRadians || 0)
+      const cos = Math.cos(dir), sin = Math.sin(dir)
+      const fwd = b.forwardOffset || 0
+      const side = b.sidewaysOffset || 0
+      const len = b.length || 0
+      const baseX = st.x + cos * fwd - sin * side
+      const baseY = st.y + sin * fwd + cos * side
+      const tipX = baseX + cos * len
+      const tipY = baseY + sin * len
+      this._spawnBullet(pid, tipX, tipY, dir, b.bulletType || 'Basic', b.width || 6)
+      st.reloadTimers[i] = Math.max(0.05, b.reload || 0.30)
+    }
+  }
+
   tick() {
     const dt = 1 / 30
 
-    // movement
+    for (const p of this.players) {
+      const st = this.state.get(p.id)
+      if (!st?.alive) continue
+      for (let i = 0; i < st.reloadTimers.length; i++) {
+        if (st.reloadTimers[i] > 0) st.reloadTimers[i] = Math.max(0, st.reloadTimers[i] - dt)
+      }
+    }
+
     for (const p of this.players) {
       const inp = this.inputs.get(p.id)
       const st = this.state.get(p.id)
       if (!inp || !st || !st.alive) continue
-
       let dx = (inp.d ? 1 : 0) - (inp.a ? 1 : 0)
       let dy = (inp.s ? 1 : 0) - (inp.w ? 1 : 0)
       const len = Math.hypot(dx, dy)
@@ -118,7 +174,61 @@ export default class Game {
       st.y = clamp(st.y + dy * this.speed * dt, r, this.bounds.h - r)
     }
 
-    // collisions (SAT with rotation)
+    for (const b of this.bullets) {
+      b.x += b.vx * dt
+      b.y += b.vy * dt
+      b.life += dt
+    }
+    this.bullets = this.bullets.filter(b =>
+      b.life < b.maxLife &&
+      b.x >= -50 && b.x <= this.bounds.w + 50 &&
+      b.y >= -50 && b.y <= this.bounds.h + 50 &&
+      b.health > 0
+    )
+
+    for (let i = 0; i < this.bullets.length; i++) {
+      const A = this.bullets[i]
+      if (!A) continue
+      for (let j = i + 1; j < this.bullets.length; j++) {
+        const B = this.bullets[j]
+        if (!B) continue
+        const dx = B.x - A.x, dy = B.y - A.y
+        const sumR = A.r + B.r
+        if (dx * dx + dy * dy <= sumR * sumR) {
+          if (A.health === B.health) {
+            A.health = 0
+            B.health = 0
+          } else if (A.health > B.health) {
+            A.health = A.health - B.health
+            B.health = 0
+          } else {
+            B.health = B.health - A.health
+            A.health = 0
+          }
+          if (A.health <= 0) { this.bullets[i] = null }
+          if (B.health <= 0) { this.bullets[j] = null }
+        }
+      }
+    }
+    this.bullets = this.bullets.filter(Boolean)
+
+    const now = Date.now()
+    for (const b of this.bullets) {
+      for (const p of this.players) {
+        const st = this.state.get(p.id)
+        if (!st?.alive) continue
+        if (p.id === b.ownerId && now - b.bornAt < 120) continue
+        const r = getBoundingRadius(st)
+        const dx = st.x - b.x, dy = st.y - b.y
+        const minD = r + b.r
+        if (dx*dx + dy*dy <= minD*minD) {
+          st.health = Math.max(0, st.health - b.damage)
+          b.health = 0
+        }
+      }
+    }
+    this.bullets = this.bullets.filter(b => b.health > 0)
+
     for (let i = 0; i < this.players.length; i++) {
       for (let j = i + 1; j < this.players.length; j++) {
         const aId = this.players[i].id
@@ -126,32 +236,26 @@ export default class Game {
         const A = this.state.get(aId)
         const B = this.state.get(bId)
         if (!A?.alive || !B?.alive) continue
-
-        const shapeA = buildShape(A) // uses A.rot
-        const shapeB = buildShape(B) // uses B.rot
+        const shapeA = buildShape(A)
+        const shapeB = buildShape(B)
         const mtv = computeMTV(shapeA, shapeB)
         if (mtv.overlap) {
           const pushX = (mtv.axis.x * mtv.depth) / 2
           const pushY = (mtv.axis.y * mtv.depth) / 2
           A.x -= pushX; A.y -= pushY
           B.x += pushX; B.y += pushY
-
-          // clamp inside arena using bounding radius
           const rA = getBoundingRadius(A)
           const rB = getBoundingRadius(B)
           A.x = clamp(A.x, rA, this.bounds.w - rA)
           A.y = clamp(A.y, rA, this.bounds.h - rA)
           B.x = clamp(B.x, rB, this.bounds.w - rB)
           B.y = clamp(B.y, rB, this.bounds.h - rB)
-
-          // body damage while overlapping
           A.health -= B.bodyDamage * dt
           B.health -= A.bodyDamage * dt
         }
       }
     }
 
-    // deaths (don’t end match yet)
     for (const p of this.players) {
       const st = this.state.get(p.id)
       if (!st) continue
@@ -161,14 +265,12 @@ export default class Game {
       }
     }
 
-    // victory condition (1 alive) or draw (0 alive)
     if (!this.finishing) {
       const alive = this.players.filter(p => this.state.get(p.id)?.alive)
       if (alive.length === 1) {
         this.finishing = true
         const winner = alive[0]
-        const winnerName = this.players.find(pp => pp.id === winner.id)?.name
-          || `P-${String(winner.id).slice(0, 4)}`
+        const winnerName = this.players.find(pp => pp.id === winner.id)?.name || `P-${String(winner.id).slice(0, 4)}`
         this.broadcast({ type: 'announcement', text: `[${winnerName}] has won the battle!` })
         this.broadcast({ type: 'exitCountdown', seconds: 5 })
         setTimeout(() => this.end('victory', { winnerId: winner.id }), 5000)
@@ -180,7 +282,6 @@ export default class Game {
       }
     }
 
-    // broadcast state
     const payload = {
       type: 'state',
       ts: Date.now(),
@@ -195,7 +296,8 @@ export default class Game {
           alive: st.alive,
           shape: st.shape,
         }
-      })
+      }),
+      bullets: this.bullets.map(b => ({ x: b.x, y: b.y, r: b.r }))
     }
     this.broadcast(payload)
   }
@@ -217,21 +319,11 @@ export default class Game {
   }
 }
 
-/* ---------- geometry / SAT ---------- */
-
-function getBoundingRadius(st) {
-  // circumscribed radius works for circle & regular polygon
-  return st.size
-}
-
+function getBoundingRadius(st) { return st.size }
 function buildShape(st) {
-  if (st.shape === 0) {
-    return { kind: 'circle', x: st.x, y: st.y, r: st.size }
-  } else {
-    return { kind: 'polygon', verts: regularPolygon(st.x, st.y, st.size, st.shape, st.rot) }
-  }
+  if (st.shape === 0) return { kind: 'circle', x: st.x, y: st.y, r: st.size }
+  return { kind: 'polygon', verts: regularPolygon(st.x, st.y, st.size, st.shape, st.rot) }
 }
-
 function regularPolygon(cx, cy, r, sides, rot = 0) {
   const verts = []
   for (let i = 0; i < sides; i++) {
@@ -240,7 +332,6 @@ function regularPolygon(cx, cy, r, sides, rot = 0) {
   }
   return verts
 }
-
 function computeMTV(a, b) {
   if (a.kind === 'circle' && b.kind === 'circle') {
     const dx = b.x - a.x, dy = b.y - a.y
@@ -259,106 +350,11 @@ function computeMTV(a, b) {
   }
   return { overlap: false, axis: { x: 0, y: 0 }, depth: 0 }
 }
-
-function satPolyPoly(A, B) {
-  let minOverlap = Infinity
-  let minAxis = { x: 0, y: 0 }
-  for (let pass = 0; pass < 2; pass++) {
-    const P = pass === 0 ? A : B
-    for (let i = 0; i < P.length; i++) {
-      const j = (i + 1) % P.length
-      const edgeX = P[j].x - P[i].x
-      const edgeY = P[j].y - P[i].y
-      const axis = normalize({ x: -edgeY, y: edgeX })
-      const [minA, maxA] = projectPoly(A, axis)
-      const [minB, maxB] = projectPoly(B, axis)
-      const overlap = Math.min(maxA, maxB) - Math.max(minA, minB)
-      if (overlap <= 0) return { overlap: false, axis: { x: 0, y: 0 }, depth: 0 }
-      if (overlap < minOverlap) {
-        minOverlap = overlap
-        const cA = centroid(A), cB = centroid(B)
-        const dir = ((cB.x - cA.x) * axis.x + (cB.y - cA.y) * axis.y) < 0 ? -1 : 1
-        minAxis = { x: axis.x * dir, y: axis.y * dir }
-      }
-    }
-  }
-  return { overlap: true, axis: minAxis, depth: minOverlap }
-}
-
-function satPolyCircle(verts, circle) {
-  let minOverlap = Infinity
-  let minAxis = { x: 0, y: 0 }
-
-  // test polygon normals
-  for (let i = 0; i < verts.length; i++) {
-    const j = (i + 1) % verts.length
-    const edgeX = verts[j].x - verts[i].x
-    const edgeY = verts[j].y - verts[i].y
-    const axis = normalize({ x: -edgeY, y: edgeX })
-    const [minP, maxP] = projectPoly(verts, axis)
-    const cProj = circle.x * axis.x + circle.y * axis.y
-    const minC = cProj - circle.r
-    const maxC = cProj + circle.r
-    const overlap = Math.min(maxP, maxC) - Math.max(minP, minC)
-    if (overlap <= 0) return { overlap: false, axis: { x: 0, y: 0 }, depth: 0 }
-    if (overlap < minOverlap) {
-      minOverlap = overlap
-      const cPoly = centroid(verts)
-      const dir = (((circle.x - cPoly.x) * axis.x + (circle.y - cPoly.y) * axis.y) < 0) ? -1 : 1
-      minAxis = { x: axis.x * dir, y: axis.y * dir }
-    }
-  }
-
-  // axis to closest vertex
-  let closest = null, minD2 = Infinity
-  for (const v of verts) {
-    const dx = circle.x - v.x, dy = circle.y - v.y
-    const d2 = dx * dx + dy * dy
-    if (d2 < minD2) { minD2 = d2; closest = v }
-  }
-  if (closest) {
-    const axis = normalize({ x: circle.x - closest.x, y: circle.y - closest.y })
-    const [minP, maxP] = projectPoly(verts, axis)
-    const cProj = circle.x * axis.x + circle.y * axis.y
-    const minC = cProj - circle.r
-    const maxC = cProj + circle.r
-    const overlap = Math.min(maxP, maxC) - Math.max(minP, minC)
-    if (overlap <= 0) return { overlap: false, axis: { x: 0, y: 0 }, depth: 0 }
-    if (overlap < minOverlap) { minOverlap = overlap; minAxis = axis }
-  }
-
-  return { overlap: true, axis: minAxis, depth: minOverlap }
-}
-
-function projectPoly(verts, axis) {
-  let min = Infinity, max = -Infinity
-  for (const v of verts) {
-    const p = v.x * axis.x + v.y * axis.y
-    if (p < min) min = p
-    if (p > max) max = p
-  }
-  return [min, max]
-}
-
-function centroid(verts) {
-  let x = 0, y = 0
-  for (const v of verts) { x += v.x; y += v.y }
-  const n = verts.length || 1
-  return { x: x / n, y: y / n }
-}
-
-function normalize(v) {
-  const m = Math.hypot(v.x, v.y)
-  if (m === 0) return { x: 1, y: 0 }
-  return { x: v.x / m, y: v.y / m }
-}
-
-function normalizeAngle(a) {
-  const two = Math.PI * 2
-  a = ((a % two) + two) % two
-  if (a > Math.PI) a -= two
-  return a
-}
-
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
-function safeSend(ws, obj) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)) } catch {} }
+function satPolyPoly(A,B){ let minOverlap=Infinity,minAxis={x:0,y:0}; for(let pass=0; pass<2; pass++){ const P=pass===0?A:B; for(let i=0;i<P.length;i++){ const j=(i+1)%P.length; const edgeX=P[j].x-P[i].x, edgeY=P[j].y-P[i].y; const axis=normalize({x:-edgeY,y:edgeX}); const [minA,maxA]=projectPoly(A,axis); const [minB,maxB]=projectPoly(B,axis); const overlap=Math.min(maxA,maxB)-Math.max(minA,minB); if(overlap<=0) return {overlap:false,axis:{x:0,y:0},depth:0}; if(overlap<minOverlap){ minOverlap=overlap; const cA=centroid(A), cB=centroid(B); const dir=((cB.x-cA.x)*axis.x+(cB.y-cA.y)*axis.y)<0?-1:1; minAxis={x:axis.x*dir, y:axis.y*dir} }}} return {overlap:true,axis:minAxis,depth:minOverlap}}
+function satPolyCircle(verts,circle){ let minOverlap=Infinity,minAxis={x:0,y:0}; for(let i=0;i<verts.length;i++){ const j=(i+1)%verts.length; const edgeX=verts[j].x-verts[i].x, edgeY=verts[j].y-verts[i].y; const axis=normalize({x:-edgeY,y:edgeX}); const [minP,maxP]=projectPoly(verts,axis); const cProj=circle.x*axis.x+circle.y*axis.y; const minC=cProj-circle.r, maxC=cProj+circle.r; const overlap=Math.min(maxP,maxC)-Math.max(minP,minC); if(overlap<=0) return {overlap:false,axis:{x:0,y:0},depth:0}; if(overlap<minOverlap){ minOverlap=overlap; const cPoly=centroid(verts); const dir=(((circle.x-cPoly.x)*axis.x+(circle.y-cPoly.y)*axis.y)<0)?-1:1; minAxis={x:axis.x*dir, y:axis.y*dir} } } let closest=null, minD2=Infinity; for(const v of verts){ const dx=circle.x-v.x, dy=circle.y-v.y; const d2=dx*dx+dy*dy; if(d2<minD2){ minD2=d2; closest=v }} if(closest){ const axis=normalize({x:circle.x-closest.x,y:circle.y-closest.y}); const [minP,maxP]=projectPoly(verts,axis); const cProj=circle.x*axis.x+circle.y*axis.y; const minC=cProj-circle.r, maxC=cProj+circle.r; const overlap=Math.min(maxP,maxC)-Math.max(minP,minC); if(overlap<=0) return {overlap:false,axis:{x:0,y:0},depth:0}; if(overlap<minOverlap){ minOverlap=overlap; minAxis=axis }} return {overlap:true,axis:minAxis,depth:minOverlap}}
+function projectPoly(verts,axis){ let min=Infinity,max=-Infinity; for(const v of verts){ const p=v.x*axis.x+v.y*axis.y; if(p<min)min=p; if(p>max)max=p } return [min,max]}
+function centroid(verts){ let x=0,y=0; for(const v of verts){ x+=v.x;y+=v.y } const n=verts.length||1; return {x:x/n,y:y/n}}
+function normalize(v){ const m=Math.hypot(v.x,v.y); if(m===0) return {x:1,y:0}; return {x:v.x/m,y:v.y/m} }
+function normalizeAngle(a){ const two=Math.PI*2; a=((a%two)+two)%two; if(a>Math.PI)a-=two; return a }
+function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)) }
+function safeSend(ws,obj){ try{ if(ws&&ws.readyState===1) ws.send(JSON.stringify(obj)) }catch{} }
