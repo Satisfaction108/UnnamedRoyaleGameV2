@@ -645,9 +645,7 @@ export default function HomePage() {
                   <span className="text-sm text-muted-foreground">{new Date().toLocaleDateString()}</span>
                 </div>
                 <h4 className="font-semibold mb-2 text-card-foreground">Beta Testing Released</h4>
-                <p className="text-sm text-muted-foreground">
-                  The game is released as a beta version.
-                </p>
+                <p className="text-sm text-muted-foreground">The game is released as a beta version.</p>
               </div>
             </div>
           </DialogContent>
@@ -723,7 +721,7 @@ export default function HomePage() {
       {/* Features Section */}
       <section className="py-16 px-4 bg-card/30">
         <div className="container mx-auto">
-          <h3 className="text-3xl font-bold text-center mb-12 text-primary">Game Features</h3>
+          <h3 className="text-3xl font-bold text-center mb-12 text-foreground">Game Features</h3>
           <div className="grid md:grid-cols-3 gap-8">
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm glow-effect">
               <CardHeader>
