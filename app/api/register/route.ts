@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       level: 1,
       gamesPlayed: 0,
       wins: 0,
+      xp: 0, // Added XP field for new users starting at 0
       settings: {
         rememberMe: false,
         notifications: true,
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
           level: userData.level,
           gamesPlayed: userData.gamesPlayed,
           wins: userData.wins,
+          xp: userData.xp, // Include XP in the response for immediate login
           createdAt: userData.createdAt,
           lastLogin: userData.lastLogin,
         },

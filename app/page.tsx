@@ -69,6 +69,10 @@ export default function HomePage() {
     confirmNewPassword: "",
   })
 
+  const [systemStatus, setSystemStatus] = useState("ONLINE")
+  const [playerStatus, setPlayerStatus] = useState("READY")
+  const [battleReadiness, setBattleReadiness] = useState(85)
+
   // Password strength calculation
   const calculatePasswordStrength = (password: string) => {
     let strength = 0
@@ -289,138 +293,257 @@ export default function HomePage() {
     }
   }, [])
 
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [changelogOpen, setChangelogOpen] = useState(false)
+
   if (isAuthenticated && currentUser) {
     return (
       <div className="min-h-screen bg-background text-foreground">
-        {/* Header */}
-        <header className="border-b border-border bg-card/50 backdrop-blur-sm">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Gamepad2 className="h-8 w-8 text-primary" />
-                <h1 className="text-2xl font-bold text-balance">UnnamedRoyaleGameV2</h1>
+        <header className="border-b border-border/50 bg-card/30 backdrop-blur-md relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5"></div>
+          <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+
+          <div className="container mx-auto px-4 py-4 relative z-10">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-6">
+                <div className="flex items-center space-x-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSettingsOpen(true)}
+                    className="h-12 w-12 border-2 border-primary/30 bg-card/50 hover:bg-primary/20 hover:border-primary/50 transition-all duration-300 relative group"
+                  >
+                    <Settings className="h-6 w-6 text-primary group-hover:rotate-90 transition-transform duration-300" />
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full animate-pulse"></div>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => window.open("https://discord.gg/JBWqcHWjg2", "_blank")}
+                    className="h-12 w-12 border-2 border-accent/30 bg-card/50 hover:bg-accent/20 hover:border-accent/50 transition-all duration-300 relative group"
+                  >
+                    <DiscordIcon className="h-6 w-6 text-accent group-hover:scale-110 transition-transform duration-300" />
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full animate-pulse"></div>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setChangelogOpen(true)}
+                    className="h-12 w-12 border-2 border-primary/30 bg-card/50 hover:bg-primary/20 hover:border-primary/50 transition-all duration-300 relative group"
+                  >
+                    <FileText className="h-6 w-6 text-primary group-hover:scale-110 transition-transform duration-300" />
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full animate-pulse"></div>
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-3 ml-6">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowSettings(true)}
-                  className="h-12 w-12 bg-card/80 hover:bg-primary/20 border border-border/50 neon-border"
-                >
-                  <Settings className="h-6 w-6" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDiscordClick}
-                  className="h-12 w-12 bg-card/80 hover:bg-primary/20 border border-border/50 neon-border"
-                >
-                  <DiscordIcon className="h-6 w-6" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowChangelog(true)}
-                  className="h-12 w-12 bg-card/80 hover:bg-primary/20 border border-border/50 neon-border"
-                >
-                  <FileText className="h-6 w-6" />
-                </Button>
+
+              <div className="flex items-center space-x-8">
+                <div className="text-center">
+                  <div className="text-xs font-mono text-muted-foreground tracking-wider">PLAYER</div>
+                  <div className="text-lg font-mono font-bold text-primary tracking-wider">
+                    {currentUser.username.toUpperCase()}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs font-mono text-muted-foreground tracking-wider">STATUS</div>
+                  <div className="text-sm font-mono font-bold text-accent tracking-wider flex items-center">
+                    <div className="w-2 h-2 bg-accent rounded-full mr-2 animate-pulse"></div>
+                    {playerStatus}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs font-mono text-muted-foreground tracking-wider">SYSTEM</div>
+                  <div className="text-sm font-mono font-bold text-primary tracking-wider flex items-center">
+                    <div className="w-2 h-2 bg-primary rounded-full mr-2 animate-pulse"></div>
+                    {systemStatus}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm">
-                <span className="text-muted-foreground">Welcome back, </span>
-                <span className="font-semibold text-primary">{currentUser.username}</span>
-              </div>
-              <Button variant="outline" onClick={() => setShowLogoutConfirm(true)}>
-                Logout
-              </Button>
+
+              <div className="flex items-center space-x-4"></div>
             </div>
           </div>
         </header>
 
         <div className="container mx-auto px-4 py-8">
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Player Stats - Left */}
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm glow-effect">
-              <CardHeader>
-                <CardTitle className="text-primary">Player Stats</CardTitle>
-                <CardDescription>Your gaming performance</CardDescription>
+            <Card className="border-2 border-primary/30 bg-card/50 backdrop-blur-sm glow-effect relative overflow-hidden group hover:border-primary/50 transition-all duration-300">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent"></div>
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary animate-pulse"></div>
+              <div className="absolute top-2 right-2 text-xs font-mono text-primary/70 tracking-wider">STATS</div>
+
+              <CardHeader className="relative z-10">
+                <CardTitle className="text-primary font-mono tracking-wider flex items-center">
+                  <div className="w-3 h-3 bg-primary rounded-full mr-2 animate-pulse"></div>
+                  PLAYER PROFILE
+                </CardTitle>
+                <CardDescription className="font-mono">Combat statistics and progression</CardDescription>
               </CardHeader>
-              <div className="p-6 pt-0 space-y-2">
-                <div className="flex justify-between">
-                  <span>Level:</span>
-                  <Badge variant="secondary">{currentUser.level}</Badge>
+              <div className="p-6 pt-0 space-y-4 relative z-10">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm font-mono">
+                    <span>XP PROGRESS</span>
+                    <span className="text-accent">{currentUser.xp || 0} / 1,000</span>
+                  </div>
+                  <Progress value={((currentUser.xp || 0) / 1000) * 100} className="h-3 bg-muted/30" />
                 </div>
-                <div className="flex justify-between">
-                  <span>Games Played:</span>
-                  <span>{currentUser.gamesPlayed}</span>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center p-3 border border-primary/20 bg-primary/5">
+                    <div className="text-2xl font-mono font-bold text-primary">{currentUser.level}</div>
+                    <div className="text-xs font-mono text-muted-foreground tracking-wider">LEVEL</div>
+                  </div>
+                  <div className="text-center p-3 border border-accent/20 bg-accent/5">
+                    <div className="text-2xl font-mono font-bold text-accent">{currentUser.wins}</div>
+                    <div className="text-xs font-mono text-muted-foreground tracking-wider">VICTORIES</div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Wins:</span>
-                  <span className="text-primary font-semibold">{currentUser.wins}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Win Rate:</span>
-                  <span>
-                    {currentUser.gamesPlayed > 0 ? Math.round((currentUser.wins / currentUser.gamesPlayed) * 100) : 0}%
-                  </span>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between font-mono text-sm">
+                    <span>BATTLES:</span>
+                    <span className="text-primary font-bold">{currentUser.gamesPlayed}</span>
+                  </div>
+                  <div className="flex justify-between font-mono text-sm">
+                    <span>WIN RATE:</span>
+                    <span className="text-accent font-bold">
+                      {currentUser.gamesPlayed > 0 ? Math.round((currentUser.wins / currentUser.gamesPlayed) * 100) : 0}
+                      %
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-mono text-sm">
+                    <span>RANK:</span>
+                  </div>
                 </div>
               </div>
             </Card>
 
-            {/* Battle - Center */}
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm glow-effect">
-              <CardHeader>
-                <CardTitle className="text-center text-2xl text-primary">Battle</CardTitle>
-                <CardDescription className="text-center">Choose your game mode and fight!</CardDescription>
+            <Card className="border-2 border-accent/30 bg-card/50 backdrop-blur-sm glow-effect relative overflow-hidden group hover:border-accent/50 transition-all duration-300">
+              <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-primary/10"></div>
+              <div className="absolute inset-0 border-2 border-accent/20 pointer-events-none animate-pulse"></div>
+
+              <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-accent/60 animate-pulse"></div>
+              <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-accent/60 animate-pulse"></div>
+              <div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-accent/60 animate-pulse"></div>
+              <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-accent/60 animate-pulse"></div>
+
+              <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-accent to-transparent animate-pulse"></div>
+              <div className="absolute top-2 right-2 text-xs font-mono text-accent/70 tracking-wider animate-pulse">
+                COMBAT
+              </div>
+
+              <CardHeader className="relative z-10 text-center">
+                <CardTitle className="text-3xl text-accent font-mono tracking-widest flex items-center justify-center">
+                  <Zap className="mr-2 h-8 w-8 animate-pulse" />
+                  BATTLE ZONE
+                  <Zap className="ml-2 h-8 w-8 animate-pulse" />
+                </CardTitle>
+                <CardDescription className="font-mono tracking-wide text-accent/80"></CardDescription>
               </CardHeader>
-              <div className="p-6 pt-0 space-y-4">
-                <div className="space-y-2">
-                  <div className="text-center">
-                    <Label htmlFor="server-select" className="text-base font-medium">
-                      Gamemode
+
+              <div className="p-6 pt-0 space-y-6 relative z-10">
+                <div className="space-y-4">
+                  <div className="text-center w-full">
+                    <Label
+                      htmlFor="server-select"
+                      className="text-lg font-mono tracking-widest text-accent font-bold block mb-2"
+                    >
+                      &gt;&gt;&gt; GAMEMODE SELECTION &lt;&lt;&lt;
                     </Label>
                   </div>
-                  <div className="flex justify-center">
+                  <div className="w-full">
                     <Select value={selectedServer} onValueChange={setSelectedServer}>
-                      <SelectTrigger id="server-select" className="bg-input border-border w-full max-w-xs">
-                        <SelectValue placeholder="Select game mode" />
+                      <SelectTrigger
+                        id="server-select"
+                        className="bg-input border-2 border-accent/50 w-full font-mono text-center hover:border-accent transition-all duration-300 h-12 text-lg font-bold tracking-wider"
+                      >
+                        <SelectValue placeholder="&gt;&gt;&gt; SELECT COMBAT MODE &lt;&lt;&lt;" />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1v1">1v1</SelectItem>
-                        <SelectItem value="2v2">2v2</SelectItem>
-                        <SelectItem value="3v3">3v3</SelectItem>
-                        <SelectItem value="Battle Royale">Battle Royale</SelectItem>
+                      <SelectContent className="font-mono bg-card border-2 border-accent/50">
+                        <SelectItem value="1v1" className="font-bold tracking-wider">
+                          1v1 DUEL
+                        </SelectItem>
+                        <SelectItem value="2v2" className="font-bold tracking-wider">
+                          2v2 SQUAD
+                        </SelectItem>
+                        <SelectItem value="3v3" className="font-bold tracking-wider">
+                          3v3 TEAM WAR
+                        </SelectItem>
+                        <SelectItem value="Battle Royale" className="font-bold tracking-wider">
+                          BATTLE ROYALE
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
-                <Button className="w-full h-12 text-lg bg-primary hover:bg-primary/80 glow-effect">
-                  <Play className="mr-2 h-5 w-5" />
-                  Enter Battle
+
+                <Button className="w-full h-16 text-xl bg-accent hover:bg-accent/80 glow-effect font-mono tracking-widest border-4 border-accent/70 relative overflow-hidden group transition-all duration-300 hover:scale-105">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+                  <div className="absolute inset-0 border-2 border-accent/30 animate-pulse"></div>
+                  <Play className="mr-3 h-8 w-8 animate-pulse" />
+                  DEPLOY TO BATTLE
+                  <Zap className="ml-3 h-8 w-8 animate-pulse" />
                 </Button>
+
+                <div className="text-center">
+                  <div className="text-xs font-mono text-muted-foreground tracking-wider mb-1">BATTLE STATUS</div>
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-2 h-2 bg-accent rounded-full animate-pulse"></div>
+                    <span className="text-sm font-mono font-bold text-accent tracking-wider">READY FOR COMBAT</span>
+                    <div className="w-2 h-2 bg-accent rounded-full animate-pulse"></div>
+                  </div>
+                </div>
               </div>
             </Card>
 
-            {/* Leaderboard - Right */}
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm glow-effect">
-              <CardHeader>
-                <CardTitle className="text-accent">Leaderboard</CardTitle>
-                <CardDescription>Top players worldwide</CardDescription>
+            <Card className="border-2 border-primary/30 bg-card/50 backdrop-blur-sm glow-effect relative overflow-hidden group hover:border-primary/50 transition-all duration-300">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent"></div>
+              <div className="absolute inset-0 border-2 border-primary/20 pointer-events-none"></div>
+              <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-primary/40"></div>
+              <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary/40"></div>
+              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-primary/40"></div>
+              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-primary/40"></div>
+              <div className="absolute top-2 right-2 text-xs font-mono text-primary/70 tracking-wider">RANKS</div>
+
+              <CardHeader className="relative z-10">
+                <CardTitle className="text-primary font-mono tracking-widest flex items-center">
+                  <Trophy className="mr-2 h-6 w-6 animate-pulse" />
+                  GLOBAL RANKINGS
+                </CardTitle>
+                <CardDescription className="font-mono">Elite warrior standings</CardDescription>
               </CardHeader>
-              <div className="p-6 pt-0">
-                <div className="text-center text-muted-foreground py-8 flex flex-col items-center">
-                  <Trophy className="h-12 w-12 mb-4 opacity-50" />
-                  <p>No leaderboard data available</p>
-                  <p className="text-sm mt-2">Check back soon!</p>
+              <div className="p-6 pt-0 relative z-10">
+                <div className="text-center text-muted-foreground py-8 flex flex-col items-center justify-center space-y-4">
+                  <div className="relative">
+                    <Trophy className="h-20 w-20 text-primary/50 animate-pulse" />
+                    <div
+                      className="absolute inset-0 h-20 w-20 border-2 border-primary/20 rotate-45 animate-spin"
+                      style={{ animationDuration: "8s" }}
+                    ></div>
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 border border-accent/30 rotate-45"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-mono tracking-wider text-primary font-bold">SYSTEM INITIALIZING</p>
+                    <div className="flex items-center justify-center space-x-1">
+                      <div className="w-2 h-2 bg-accent rounded-full animate-pulse"></div>
+                      <div
+                        className="w-2 h-2 bg-accent rounded-full animate-pulse"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-accent rounded-full animate-pulse"
+                        style={{ animationDelay: "0.4s" }}
+                      ></div>
+                    </div>
+                    <p className="text-xs font-mono opacity-70 tracking-wide">LOADING WARRIOR DATA...</p>
+                  </div>
                 </div>
               </div>
             </Card>
           </div>
         </div>
 
-        <Sheet open={showSettings} onOpenChange={setShowSettings}>
+        <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
           <SheetContent side="left" className="w-[480px] bg-sidebar border-sidebar-border">
             <SheetHeader className="px-2">
               <SheetTitle className="text-sidebar-foreground">Settings</SheetTitle>
@@ -619,7 +742,7 @@ export default function HomePage() {
                     <Button
                       variant="outline"
                       className="w-full bg-transparent border-sidebar-border text-sidebar-foreground hover:bg-sidebar-accent"
-                      onClick={() => setShowSettings(false)}
+                      onClick={() => setSettingsOpen(false)}
                     >
                       Cancel
                     </Button>
@@ -630,7 +753,7 @@ export default function HomePage() {
           </SheetContent>
         </Sheet>
 
-        <Dialog open={showChangelog} onOpenChange={setShowChangelog}>
+        <Dialog open={changelogOpen} onOpenChange={setChangelogOpen}>
           <DialogContent className="sm:max-w-md bg-card border-border">
             <DialogHeader>
               <DialogTitle className="text-card-foreground">Changelog</DialogTitle>
@@ -697,53 +820,87 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="py-20 px-4">
-        <div className="container mx-auto text-center">
-          <h2 className="text-5xl font-bold mb-6 text-balance">
-            <span className="text-primary glow-effect">UnnamedRoyaleGameV2</span>
+      <section className="py-20 px-4 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5"></div>
+        <div className="absolute top-10 left-10 w-32 h-32 border border-primary/20 rotate-45"></div>
+        <div className="absolute bottom-10 right-10 w-24 h-24 border border-accent/20 rotate-12"></div>
+
+        <div className="container mx-auto text-center relative z-10">
+          <h2 className="text-6xl font-bold mb-6 text-balance font-mono tracking-wider">
+            <span className="text-primary glow-effect">UNNAMED</span>
+            <span className="text-accent">ROYALE</span>
+            <span className="text-primary glow-effect">GAME</span>
+            <span className="text-foreground">V2</span>
           </h2>
-          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto text-pretty">
-            Battle for victory in UnnamedRoyaleGameV2.
-          </p>
+          <div className="flex justify-center mb-8">
+            <div className="bg-card/50 border-2 border-primary/30 px-8 py-4 backdrop-blur-sm">
+              <p className="text-xl text-muted-foreground font-mono tracking-wide">BATTLE FOR VICTORY</p>
+            </div>
+          </div>
           <div className="flex gap-4 justify-center">
             <Button
               size="lg"
-              className="text-lg px-8 bg-primary hover:bg-primary/80 glow-effect"
+              className="text-lg px-12 py-4 bg-primary hover:bg-primary/80 glow-effect font-mono tracking-wider border-2 border-primary/50 relative overflow-hidden group"
               onClick={() => setShowSignUp(true)}
             >
-              <Zap className="mr-2 h-5 w-5" />
-              Sign Up
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+              <Zap className="mr-2 h-6 w-6" />
+              SIGN UP
             </Button>
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-16 px-4 bg-card/30">
-        <div className="container mx-auto">
-          <h3 className="text-3xl font-bold text-center mb-12 text-foreground">Game Features</h3>
+      <section className="py-16 px-4 bg-card/30 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0 grid-pattern"></div>
+        </div>
+
+        <div className="container mx-auto relative z-10">
+          <div className="text-center mb-12">
+            <div className="inline-block bg-card/50 border-2 border-primary/30 px-8 py-4 backdrop-blur-sm">
+              <h3 className="text-3xl font-bold text-foreground font-mono tracking-wider">GAME FEATURES</h3>
+            </div>
+          </div>
           <div className="grid md:grid-cols-3 gap-8">
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm glow-effect">
-              <CardHeader>
-                <Users className="h-12 w-12 text-primary mb-4" />
-                <CardTitle className="text-card-foreground">Various Gamemodes</CardTitle>
-                <CardDescription>1v1, 2v2, 3v3, Battle Royale, and much more!</CardDescription>
+            <Card className="border-2 border-primary/30 bg-card/50 backdrop-blur-sm glow-effect relative overflow-hidden group hover:border-primary/50 transition-colors">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+              <CardHeader className="relative z-10">
+                <div className="relative mb-4">
+                  <Users className="h-12 w-12 text-primary" />
+                  <div className="absolute inset-0 h-12 w-12 border border-primary/30 rotate-45"></div>
+                </div>
+                <CardTitle className="text-card-foreground font-mono tracking-wide">VARIOUS GAMEMODES</CardTitle>
+                <CardDescription className="font-mono text-sm">
+                  1v1, 2v2, 3v3, Battle Royale, and much more!
+                </CardDescription>
               </CardHeader>
             </Card>
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm glow-effect">
-              <CardHeader>
-                <Trophy className="h-12 w-12 text-accent mb-4" />
-                <CardTitle className="text-card-foreground">Ranked Matches</CardTitle>
-                <CardDescription>
+            <Card className="border-2 border-accent/30 bg-card/50 backdrop-blur-sm glow-effect relative overflow-hidden group hover:border-accent/50 transition-colors">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-accent to-transparent"></div>
+              <CardHeader className="relative z-10">
+                <div className="relative mb-4">
+                  <Trophy className="h-12 w-12 text-accent" />
+                  <div className="absolute inset-0 h-12 w-12 border border-accent/30 rotate-45"></div>
+                </div>
+                <CardTitle className="text-card-foreground font-mono tracking-wide">RANKED MATCHES</CardTitle>
+                <CardDescription className="font-mono text-sm">
                   Tournaments and ranked matches; Climb the leaderboards and prove you're a pro player!
                 </CardDescription>
               </CardHeader>
             </Card>
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm glow-effect">
-              <CardHeader>
-                <Gamepad2 className="h-12 w-12 text-primary mb-4" />
-                <CardTitle className="text-card-foreground">Fun and Enjoyable</CardTitle>
-                <CardDescription>Enjoyable experiences in the game, with no limitations!</CardDescription>
+            <Card className="border-2 border-primary/30 bg-card/50 backdrop-blur-sm glow-effect relative overflow-hidden group hover:border-primary/50 transition-colors">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+              <CardHeader className="relative z-10">
+                <div className="relative mb-4">
+                  <Gamepad2 className="h-12 w-12 text-primary" />
+                  <div className="absolute inset-0 h-12 w-12 border border-primary/30 rotate-45"></div>
+                </div>
+                <CardTitle className="text-card-foreground font-mono tracking-wide">FUN AND ENJOYABLE</CardTitle>
+                <CardDescription className="font-mono text-sm">
+                  Enjoyable experiences in the game, with no limitations!
+                </CardDescription>
               </CardHeader>
             </Card>
           </div>

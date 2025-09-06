@@ -137,3 +137,11 @@
   border: 1px solid rgba(22, 78, 99, 0.5);
   box-shadow: 0 0 10px rgba(22, 78, 99, 0.2);
 }
+
+/* Grid pattern background */
+.grid-pattern {
+  background-image: 
+    linear-gradient(rgba(22, 78, 99, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22, 78, 99, 0.1) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
