@@ -323,7 +323,7 @@ function onPointerUp() {
     return out
   }
 
-  function getInterpolatedBullets(renderServerTime) {
+function getInterpolatedBullets(renderServerTime) {
   if (snapshots.length === 0) return []
   if (snapshots.length === 1) {
     const only = snapshots[0].bullets || new Map()
@@ -349,6 +349,9 @@ function onPointerUp() {
         x: b0.x + (b1.x - b0.x) * t,
         y: b0.y + (b1.y - b0.y) * t,
         r: b1.r ?? b0.r,
+        size: b1.size ?? b0.size,
+        sides: b1.sides ?? b0.sides,
+        strokeWidth: b1.strokeWidth ?? b0.strokeWidth,
       })
     } else {
       const b = b1 || b0
@@ -359,11 +362,15 @@ function onPointerUp() {
         x: b.x + (b.vx || 0) * dt,
         y: b.y + (b.vy || 0) * dt,
         r: b.r,
+        size: b.size,
+        sides: b.sides,
+        strokeWidth: b.strokeWidth,
       })
     }
   })
   return out
 }
+
 
 
   function loop(now) {
@@ -517,21 +524,33 @@ function onPointerUp() {
       ctx.fill(); ctx.stroke()
     }
 
-    // 🔥 damage flash ring
-    const until = hurtUntil.get(p.id) || 0
-    const msLeft = until - now
-    if (msLeft > 0) {
-      const a = Math.min(1, Math.max(0, msLeft / 200))       // fade 0..1
-      const ringR = r * (1 + 0.22 * a)                       // slight expansion
-      ctx.save()
-      ctx.globalAlpha = 0.65 * a
-      ctx.lineWidth = Math.max(2, r * 0.25)
-      ctx.strokeStyle = 'rgb(255,64,64)'
-      ctx.beginPath()
-      ctx.arc(x, y, ringR, 0, Math.PI * 2)
-      ctx.stroke()
-      ctx.restore()
-    }
+// 🔥 damage flash along actual tank shape
+const until = hurtUntil.get(p.id) || 0
+const msLeft = until - now
+if (msLeft > 0) {
+  const a = Math.min(1, Math.max(0, msLeft / 200)) // fade 0..1
+  ctx.save()
+  ctx.globalAlpha = 0.7 * a
+  ctx.lineWidth = Math.max(2, r * 0.28)
+  ctx.strokeStyle = 'rgb(255,64,64)'
+  ctx.lineJoin = 'round'
+  if ((tank?.shape ?? p.shape ?? 0) === 0) {
+    // circle tanks
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.stroke()
+  } else {
+    // polygon tanks
+    const verts = regularPolygonScreen(x, y, r, tank?.shape ?? p.shape, p.rot || 0)
+    ctx.beginPath()
+    ctx.moveTo(verts[0].x, verts[0].y)
+    for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y)
+    ctx.closePath()
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
 
     // health bar + name
     const pct = Math.max(0, Math.min(1, (p.health || 0) / (p.maxHealth || 1)))
@@ -551,23 +570,42 @@ function onPointerUp() {
 }
 
 
-  function drawBullets(bullets) {
-    if (!bullets?.length) return
-    ctx.save()
-    ctx.fillStyle = 'rgba(255,255,255,0.9)'
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)'
-    ctx.lineWidth = 2
-    for (const b of bullets) {
-      const sx = worldToScreenX(b.x)
-      const sy = worldToScreenY(b.y)
-      const rr = Math.max(2, (b.r || 3) * zoom)
+function drawBullets(bullets) {
+  if (!bullets?.length) return
+  ctx.save()
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'
+  for (const b of bullets) {
+    const sx = worldToScreenX(b.x)
+    const sy = worldToScreenY(b.y)
+    const rad = Math.max(2, (b.size ?? b.r ?? 3) * zoom)
+    const sides = Math.max(0, b.sides | 0)
+    ctx.lineWidth = Math.max(1, (b.strokeWidth ?? 2) * (0.75 + 0.25 * zoom))
+
+    if (sides === 0) {
+      // circle bullet
       ctx.beginPath()
-      ctx.arc(sx, sy, rr, 0, Math.PI * 2)
+      ctx.arc(sx, sy, rad, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    } else {
+      // polygon bullet
+      const verts = []
+      for (let i = 0; i < sides; i++) {
+        const a = (i * 2 * Math.PI) / sides
+        verts.push({ x: sx + Math.cos(a) * rad, y: sy + Math.sin(a) * rad })
+      }
+      ctx.beginPath()
+      ctx.moveTo(verts[0].x, verts[0].y)
+      for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y)
+      ctx.closePath()
       ctx.fill()
       ctx.stroke()
     }
-    ctx.restore()
   }
+  ctx.restore()
+}
+
 
   function readBarrel(b) {
     if (Array.isArray(b)) {

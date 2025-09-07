@@ -111,26 +111,36 @@ export default class Game {
     this.loop = setInterval(() => this.tick(), 1000 / 30)
   }
 
-  _spawnBullet(ownerId, x, y, angle, spec, width) {
-    const bspec = BULLET_DEFS[spec] || BULLET_DEFS.Basic
-    const speed = bspec.speed
-    const cos = Math.cos(angle), sin = Math.sin(angle)
-    const r = Math.max(2, (width || 6) * 0.4)
-    const b = {
-      id: this._bulletSeq++,
-      ownerId,
-      x, y,
-      vx: cos * speed,
-      vy: sin * speed,
-      r,
-      damage: bspec.damage,
-      health: bspec.health,
-      bornAt: Date.now(),
-      life: 0,
-      maxLife: 3.0,
-    }
-    this.bullets.push(b)
+_spawnBullet(ownerId, x, y, angle, spec, width) {
+  const bspec = BULLET_DEFS[spec] || BULLET_DEFS.Basic
+  const speed = bspec.speed
+  const cos = Math.cos(angle), sin = Math.sin(angle)
+
+  // visual size (also used for collision radius).
+  const size = (typeof bspec.size === 'number')
+    ? bspec.size
+    : Math.max(2, (width || 6) * 0.4)
+
+  const b = {
+    id: this._bulletSeq++,
+    ownerId,
+    x, y,
+    vx: cos * speed,
+    vy: sin * speed,
+    // collision uses r; keep it in sync with visual size
+    r: size,
+    size,                              // 🔹 for client rendering
+    sides: bspec.sides ?? 0,           // 🔹 0=circle, >=3 polygon
+    strokeWidth: bspec.strokeWidth ?? 2, // 🔹 outline width in px
+    damage: bspec.damage,
+    health: bspec.health,
+    bornAt: Date.now(),
+    life: 0,
+    maxLife: 3.0,
   }
+  this.bullets.push(b)
+}
+
 
   _shootFromTank(pid, st) {
     for (let i = 0; i < st.barrels.length; i++) {
@@ -298,9 +308,11 @@ const payload = {
     }
   }),
   bullets: this.bullets.map(b => ({
-    id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, r: b.r
+    id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
+    r: b.r, size: b.size, sides: b.sides, strokeWidth: b.strokeWidth
   }))
 }
+
 
     this.broadcast(payload)
   }
