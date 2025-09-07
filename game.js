@@ -68,7 +68,10 @@ this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
 
     const tanksForPlayers = players.map(p => {
       const st = this.state.get(p.id)
-      return { id: p.id, name: roster.find(r => r.id === p.id)?.name || `P-${String(p.id).slice(0, 4)}`, tankId: st.tankId }
+            return {
+        id: p.id,
+        tank: { name: st.tankId, shape: st.shape, size: st.size, barrels: st.barrels },
+      }
     })
 
     players.forEach((p) => {
