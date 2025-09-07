@@ -50,165 +50,203 @@
   let lastAimSent = 0
   let lastAngleSent = 0
 
-  let lastFrameTs = 0
-  let lastBullets = []
+let lastFrameTs = 0
+// firing
+let mouseDown = false
+let autofireEnabled = false
+let fireAccumMs = 0
+const FIRE_INTERVAL_MS = 60  // client throttle; server still enforces reloads
+
 
   function start(m) {
-    ws = window.__wsRef
-    myId = m.you
-    world = { w: m.w || 2000, h: m.h || 2000 }
+  ws = window.__wsRef
+  myId = m.you
+  world = { w: m.w || 2000, h: m.h || 2000 }
 
-    names.clear()
-    if (Array.isArray(m.roster)) m.roster.forEach((r) => names.set(r.id, r.name || `P-${String(r.id).slice(0, 4)}`))
-    tanks.clear()
-    if (Array.isArray(m.tanks)) m.tanks.forEach(({ id, tank }) => tanks.set(id, tank))
+  names.clear()
+  if (Array.isArray(m.roster)) m.roster.forEach((r) => names.set(r.id, r.name || `P-${String(r.id).slice(0, 4)}`))
+  tanks.clear()
+  if (Array.isArray(m.tanks)) m.tanks.forEach(({ id, tank }) => tanks.set(id, tank))
 
-    canvas = $('gameCanvas')
-    ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
-    resizeCanvas()
-    window.addEventListener('resize', onResize, { passive: true })
+  canvas = $('gameCanvas')
+  ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
+  resizeCanvas()
+  window.addEventListener('resize', onResize, { passive: true })
 
-    $('queueScreen') && ($('queueScreen').hidden = true)
-    $('gameView') && ($('gameView').hidden = false)
+  $('queueScreen') && ($('queueScreen').hidden = true)
+  $('gameView') && ($('gameView').hidden = false)
 
-    window.addEventListener('keydown', onKey, { passive: false })
-    window.addEventListener('keyup', onKey, { passive: false })
-    window.addEventListener('pointermove', onPointerMove, { passive: true })
-    window.addEventListener('pointerdown', onPointerDown, { passive: true })
-    window.addEventListener('wheel', onWheel, { passive: false })
+  window.addEventListener('keydown', onKey, { passive: false })
+  window.addEventListener('keyup', onKey, { passive: false })
+  window.addEventListener('pointermove', onPointerMove, { passive: true })
+  window.addEventListener('pointerdown', onPointerDown, { passive: true })
+  window.addEventListener('pointerup', onPointerUp, { passive: true })
+  window.addEventListener('blur', onPointerUp, { passive: true }) // safety
+  window.addEventListener('wheel', onWheel, { passive: false })
 
-    running = true
-    lastFrameTs = performance.now()
-    anim = requestAnimationFrame(loop)
+  running = true
+  lastFrameTs = performance.now()
+  anim = requestAnimationFrame(loop)
 
-    announceText = null
-    announceUntil = 0
-    exitCountdownSecs = 0
-    exitCountdownStart = 0
-    isSpectator = false
-    zoom = targetZoom = 1
-    lastBullets = []
-  }
+  announceText = null
+  announceUntil = 0
+  exitCountdownSecs = 0
+  exitCountdownStart = 0
+  isSpectator = false
+  zoom = targetZoom = 1
 
-  function stop() {
-    running = false
-    try { cancelAnimationFrame(anim) } catch {}
-    window.removeEventListener('keydown', onKey)
-    window.removeEventListener('keyup', onKey)
-    window.removeEventListener('resize', onResize)
-    window.removeEventListener('pointermove', onPointerMove)
-    window.removeEventListener('pointerdown', onPointerDown)
-    window.removeEventListener('wheel', onWheel)
-    $('gameView') && ($('gameView').hidden = true)
-    snapshots.length = 0
-    names.clear()
-    tanks.clear()
-    lastBullets = []
-  }
+  // firing state
+  mouseDown = false
+  autofireEnabled = false
+  fireAccumMs = 0
+}
 
-  function handle(msg) {
-    if (msg.type === 'matchStart') { start(msg); return true }
-    if (!running) return false
 
-    if (msg.type === 'state') {
-      if (typeof msg.ts === 'number') {
-        const estimate = Date.now() - msg.ts
-        serverOffset += (estimate - serverOffset) * OFFSET_SMOOTH
-      }
-      const map = new Map()
-      for (const p of msg.players || []) {
-        map.set(p.id, {
-          x: p.x, y: p.y,
-          rot: p.rot ?? 0,
-          size: p.size,
-          health: p.health, maxHealth: p.maxHealth,
-          alive: p.alive !== false,
-          shape: p.shape ?? (tanks.get(p.id)?.shape || 0),
-        })
-      }
-      snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map })
-      if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
+function stop() {
+  running = false
+  try { cancelAnimationFrame(anim) } catch {}
+  window.removeEventListener('keydown', onKey)
+  window.removeEventListener('keyup', onKey)
+  window.removeEventListener('resize', onResize)
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerdown', onPointerDown)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('blur', onPointerUp)
+  window.removeEventListener('wheel', onWheel)
 
-      lastBullets = Array.isArray(msg.bullets) ? msg.bullets : []
+  $('gameView') && ($('gameView').hidden = true)
+  snapshots.length = 0
+  names.clear()
+  tanks.clear()
 
-      const me = map.get(myId)
-      const newSpectator = me ? !me.alive : true
-      if (newSpectator !== isSpectator) {
-        isSpectator = newSpectator
-        if (!isSpectator) {
-          targetZoom = zoom = 1
-          specKeys.up = specKeys.left = specKeys.down = specKeys.right = false
-        }
-      }
-      return true
+  mouseDown = false
+  autofireEnabled = false
+  fireAccumMs = 0
+}
+
+
+function handle(msg) {
+  if (msg.type === 'matchStart') { start(msg); return true }
+  if (!running) return false
+
+  if (msg.type === 'state') {
+    if (typeof msg.ts === 'number') {
+      const estimate = Date.now() - msg.ts
+      serverOffset += (estimate - serverOffset) * OFFSET_SMOOTH
+    }
+    const map = new Map()
+    for (const p of msg.players || []) {
+      map.set(p.id, {
+        x: p.x, y: p.y,
+        rot: p.rot ?? 0,
+        size: p.size,
+        health: p.health, maxHealth: p.maxHealth,
+        alive: p.alive !== false,
+        shape: p.shape ?? (tanks.get(p.id)?.shape || 0),
+      })
     }
 
-    if (msg.type === 'announcement' && typeof msg.text === 'string') {
-      announceText = msg.text
-      announceUntil = performance.now() + 4000
-      return true
-    }
+    // store bullets as a Map keyed by id for interpolation
+    const bulletsMap = new Map()
+    for (const b of (msg.bullets || [])) bulletsMap.set(b.id, b)
 
-    if (msg.type === 'exitCountdown' && typeof msg.seconds === 'number') {
-      exitCountdownSecs = Math.max(0, Math.floor(msg.seconds))
-      exitCountdownStart = performance.now()
-      return true
-    }
+    snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsMap })
+    if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
 
-    if (msg.type === 'matchEnd') { stop(); window.__onMatchEnd && window.__onMatchEnd(msg); return true }
-    return false
+    const me = map.get(myId)
+    const newSpectator = me ? !me.alive : true
+    if (newSpectator !== isSpectator) {
+      isSpectator = newSpectator
+      if (!isSpectator) {
+        targetZoom = zoom = 1
+        specKeys.up = specKeys.left = specKeys.down = specKeys.right = false
+      }
+    }
+    return true
   }
+
+  if (msg.type === 'announcement' && typeof msg.text === 'string') {
+    announceText = msg.text
+    announceUntil = performance.now() + 4000
+    return true
+  }
+
+  if (msg.type === 'exitCountdown' && typeof msg.seconds === 'number') {
+    exitCountdownSecs = Math.max(0, Math.floor(msg.seconds))
+    exitCountdownStart = performance.now()
+    return true
+  }
+
+  if (msg.type === 'matchEnd') { stop(); window.__onMatchEnd && window.__onMatchEnd(msg); return true }
+  return false
+}
+
 
   function onKey(e) {
-    const k = e.key.toLowerCase()
-    const isMoveKey = ['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright'].includes(k)
-    const isZoomKey = k === '-' || k === '_' || k === '+' || k === '='
-    if (isMoveKey || (isSpectator && isZoomKey)) e.preventDefault()
+  const k = e.key.toLowerCase()
+  const isMoveKey = ['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright'].includes(k)
+  const isZoomKey = k === '-' || k === '_' || k === '+' || k === '='
+  if (isMoveKey || (isSpectator && isZoomKey)) e.preventDefault()
 
-    if (e.type === 'keydown') {
-      if (isSpectator) {
-        if (k === 'w' || k === 'arrowup') specKeys.up = true
-        if (k === 'a' || k === 'arrowleft') specKeys.left = true
-        if (k === 's' || k === 'arrowdown') specKeys.down = true
-        if (k === 'd' || k === 'arrowright') specKeys.right = true
-        if (isZoomKey) {
-          if (k === '-' || k === '_') targetZoom = clamp(targetZoom / ZOOM_STEP_KEYS, ZOOM_MIN, ZOOM_MAX)
-          if (k === '+' || k === '=') targetZoom = clamp(targetZoom * ZOOM_STEP_KEYS, ZOOM_MIN, ZOOM_MAX)
-        }
-      } else {
-        let changed = false
-        if (k === 'w' || k === 'arrowup') { if (!keys.w) { keys.w = true; changed = true } }
-        if (k === 'a' || k === 'arrowleft') { if (!keys.a) { keys.a = true; changed = true } }
-        if (k === 's' || k === 'arrowdown') { if (!keys.s) { keys.s = true; changed = true } }
-        if (k === 'd' || k === 'arrowright') { if (!keys.d) { keys.d = true; changed = true } }
-        if (changed && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'input', ...keys }))
+  if (e.type === 'keydown') {
+    if (isSpectator) {
+      if (k === 'w' || k === 'arrowup') specKeys.up = true
+      if (k === 'a' || k === 'arrowleft') specKeys.left = true
+      if (k === 's' || k === 'arrowdown') specKeys.down = true
+      if (k === 'd' || k === 'arrowright') specKeys.right = true
+      if (isZoomKey) {
+        if (k === '-' || k === '_') targetZoom = clamp(targetZoom / ZOOM_STEP_KEYS, ZOOM_MIN, ZOOM_MAX)
+        if (k === '+' || k === '=') targetZoom = clamp(targetZoom * ZOOM_STEP_KEYS, ZOOM_MIN, ZOOM_MAX)
       }
     } else {
-      if (isSpectator) {
-        if (k === 'w' || k === 'arrowup') specKeys.up = false
-        if (k === 'a' || k === 'arrowleft') specKeys.left = false
-        if (k === 's' || k === 'arrowdown') specKeys.down = false
-        if (k === 'd' || k === 'arrowright') specKeys.right = false
-      } else {
-        let changed = false
-        if (k === 'w' || k === 'arrowup') { if (keys.w) { keys.w = false; changed = true } }
-        if (k === 'a' || k === 'arrowleft') { if (keys.a) { keys.a = false; changed = true } }
-        if (k === 's' || k === 'arrowdown') { if (keys.s) { keys.s = false; changed = true } }
-        if (k === 'd' || k === 'arrowright') { if (keys.d) { keys.d = false; changed = true } }
-        if (changed && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'input', ...keys }))
+      // autofire toggle
+      if (k === 'e') {
+        autofireEnabled = !autofireEnabled
+        announceText = `Autofire ${autofireEnabled ? 'Enabled.' : 'Disabled.'}`
+        announceUntil = performance.now() + 1800
+        return
       }
+
+      let changed = false
+      if (k === 'w' || k === 'arrowup') { if (!keys.w) { keys.w = true; changed = true } }
+      if (k === 'a' || k === 'arrowleft') { if (!keys.a) { keys.a = true; changed = true } }
+      if (k === 's' || k === 'arrowdown') { if (!keys.s) { keys.s = true; changed = true } }
+      if (k === 'd' || k === 'arrowright') { if (!keys.d) { keys.d = true; changed = true } }
+      if (changed && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'input', ...keys }))
+    }
+  } else {
+    if (isSpectator) {
+      if (k === 'w' || k === 'arrowup') specKeys.up = false
+      if (k === 'a' || k === 'arrowleft') specKeys.left = false
+      if (k === 's' || k === 'arrowdown') specKeys.down = false
+      if (k === 'd' || k === 'arrowright') specKeys.right = false
+    } else {
+      let changed = false
+      if (k === 'w' || k === 'arrowup') { if (keys.w) { keys.w = false; changed = true } }
+      if (k === 'a' || k === 'arrowleft') { if (keys.a) { keys.a = false; changed = true } }
+      if (k === 's' || k === 'arrowdown') { if (keys.s) { keys.s = false; changed = true } }
+      if (k === 'd' || k === 'arrowright') { if (keys.d) { keys.d = false; changed = true } }
+      if (changed && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'input', ...keys }))
     }
   }
+}
 
   function onPointerMove(e) {
     mouseCssX = e.clientX
     mouseCssY = e.clientY
   }
 
-  function onPointerDown() {
-    if (isSpectator) return
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'shoot' }))
-  }
+function onPointerDown() {
+  if (isSpectator) return
+  mouseDown = true
+  // instant first shot; repeat handled in loop() with throttle
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'shoot' }))
+}
+
+function onPointerUp() {
+  mouseDown = false
+}
+
 
   function onWheel(e) {
     if (!isSpectator) return
@@ -264,47 +302,100 @@
     return out
   }
 
-  function loop(now) {
-    if (!running) return
-    const dt = Math.max(0.001, (now - lastFrameTs) / 1000)
-    lastFrameTs = now
-
-    zoom += (targetZoom - zoom) * ZOOM_SMOOTH
-    if (!isSpectator) zoom = targetZoom = 1
-
-    const renderServerTime = Date.now() - serverOffset - INTERP_DELAY_MS
-    const players = getInterpolated(renderServerTime)
-
-    const me = players.find(p => p.id === myId)
-
-    if (isSpectator) {
-      const vx = (specKeys.right ? 1 : 0) - (specKeys.left ? 1 : 0)
-      const vy = (specKeys.down ? 1 : 0) - (specKeys.up ? 1 : 0)
-      let len = Math.hypot(vx, vy)
-      if (len > 0) {
-        const inv = 1 / len
-        camera.x += (vx * SPEC_PAN_PX_PER_S * inv) * dt / zoom
-        camera.y += (vy * SPEC_PAN_PX_PER_S * inv) * dt / zoom
-      }
-    } else if (me) {
-      camera.x += (me.x - camera.x) * CAM_SMOOTH
-      camera.y += (me.y - camera.y) * CAM_SMOOTH
-      maybeSendAim(me)
-    }
-
-    camera.x = clamp(camera.x, 0, world.w)
-    camera.y = clamp(camera.y, 0, world.h)
-
-    ctx.clearRect(0, 0, viewW, viewH)
-    drawWorld()
-    drawPlayers(players)
-    drawBullets(lastBullets)
-    drawAnnouncements()
-    drawExitCountdown()
-    if (me && !me.alive) drawDeathOverlay()
-
-    anim = requestAnimationFrame(loop)
+  function getInterpolatedBullets(renderServerTime) {
+  if (snapshots.length === 0) return []
+  if (snapshots.length === 1) {
+    const only = snapshots[0].bullets || new Map()
+    return [...only.values()]
   }
+  let i = snapshots.length - 2
+  while (i >= 0 && (snapshots[i].ts > renderServerTime)) i--
+  const a = Math.max(0, i), b = Math.min(snapshots.length - 1, a + 1)
+  const s0 = snapshots[a], s1 = snapshots[b]
+  const t0 = s0.ts, t1 = s1.ts
+  const t = (t1 === t0) ? 1 : Math.max(0, Math.min(1, (renderServerTime - t0) / (t1 - t0)))
+
+  const B0 = s0.bullets || new Map()
+  const B1 = s1.bullets || new Map()
+  const ids = new Set([...B0.keys(), ...B1.keys()])
+  const out = []
+  ids.forEach((id) => {
+    const b0 = B0.get(id)
+    const b1 = B1.get(id)
+    if (b0 && b1) {
+      out.push({
+        id,
+        x: b0.x + (b1.x - b0.x) * t,
+        y: b0.y + (b1.y - b0.y) * t,
+        r: b1.r ?? b0.r,
+      })
+    } else {
+      const b = b1 || b0
+      const baseTs = b1 ? t1 : t0
+      const dt = (renderServerTime - baseTs) / 1000
+      out.push({
+        id: b.id,
+        x: b.x + (b.vx || 0) * dt,
+        y: b.y + (b.vy || 0) * dt,
+        r: b.r,
+      })
+    }
+  })
+  return out
+}
+
+
+  function loop(now) {
+  if (!running) return
+  const dt = Math.max(0.001, (now - lastFrameTs) / 1000)
+  lastFrameTs = now
+
+  zoom += (targetZoom - zoom) * ZOOM_SMOOTH
+  if (!isSpectator) zoom = targetZoom = 1
+
+  const renderServerTime = Date.now() - serverOffset - INTERP_DELAY_MS
+  const players = getInterpolated(renderServerTime)
+
+  const me = players.find(p => p.id === myId)
+
+  if (isSpectator) {
+    const vx = (specKeys.right ? 1 : 0) - (specKeys.left ? 1 : 0)
+    const vy = (specKeys.down ? 1 : 0) - (specKeys.up ? 1 : 0)
+    let len = Math.hypot(vx, vy)
+    if (len > 0) {
+      const inv = 1 / len
+      camera.x += (vx * SPEC_PAN_PX_PER_S * inv) * dt / zoom
+      camera.y += (vy * SPEC_PAN_PX_PER_S * inv) * dt / zoom
+    }
+  } else if (me) {
+    camera.x += (me.x - camera.x) * CAM_SMOOTH
+    camera.y += (me.y - camera.y) * CAM_SMOOTH
+    maybeSendAim(me)
+
+    // hold-to-fire / autofire (client throttle; server enforces reload)
+    fireAccumMs += dt * 1000
+    if ((mouseDown || autofireEnabled) && ws && ws.readyState === 1 && fireAccumMs >= FIRE_INTERVAL_MS) {
+      ws.send(JSON.stringify({ type: 'shoot' }))
+      fireAccumMs = 0
+    }
+  }
+
+  camera.x = clamp(camera.x, 0, world.w)
+  camera.y = clamp(camera.y, 0, world.h)
+
+  // render
+  ctx.clearRect(0, 0, viewW, viewH)
+  drawWorld()
+  drawPlayers(players)
+  const bullets = getInterpolatedBullets(renderServerTime)
+  drawBullets(bullets)
+  drawAnnouncements()
+  drawExitCountdown()
+  if (me && !me.alive) drawDeathOverlay()
+
+  anim = requestAnimationFrame(loop)
+}
+
 
   function maybeSendAim(me) {
     const wx = camera.x - (viewW / 2) / zoom + mouseCssX / zoom

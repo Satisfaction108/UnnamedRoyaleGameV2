@@ -282,23 +282,26 @@ export default class Game {
       }
     }
 
-    const payload = {
-      type: 'state',
-      ts: Date.now(),
-      players: this.players.map((p) => {
-        const st = this.state.get(p.id)
-        return {
-          id: p.id,
-          x: st.x, y: st.y,
-          rot: st.rot,
-          size: st.size,
-          health: st.health, maxHealth: st.maxHealth,
-          alive: st.alive,
-          shape: st.shape,
-        }
-      }),
-      bullets: this.bullets.map(b => ({ x: b.x, y: b.y, r: b.r }))
+const payload = {
+  type: 'state',
+  ts: Date.now(),
+  players: this.players.map((p) => {
+    const st = this.state.get(p.id)
+    return {
+      id: p.id,
+      x: st.x, y: st.y,
+      rot: st.rot,
+      size: st.size,
+      health: st.health, maxHealth: st.maxHealth,
+      alive: st.alive,
+      shape: st.shape,
     }
+  }),
+  bullets: this.bullets.map(b => ({
+    id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, r: b.r
+  }))
+}
+
     this.broadcast(payload)
   }
 
