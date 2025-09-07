@@ -66,19 +66,13 @@ this.state.set(p.id, {
 this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
     })
 
-
-
-
-
     const tanksForPlayers = players.map(p => {
       const st = this.state.get(p.id)
-      return {
-        id: p.id,
-        tank: { name: st.tankId, shape: st.shape, size: st.size, barrels: st.barrels },
-      }
+      return { id: p.id, name: roster.find(r => r.id === p.id)?.name || `P-${String(p.id).slice(0, 4)}`, tankId: st.tankId }
     })
 
     players.forEach((p) => {
+      const st = this.state.get(p.id)
       safeSend(p.ws, {
         type: 'matchStart',
         gameId: this.id,
@@ -89,7 +83,7 @@ this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
         tanks: tanksForPlayers,
       })
 
-      p.ws.on('message', (msg) => {
+      const onMessage = (msg) => {
         try {
           const d = JSON.parse(msg)
           if (d.type === 'input' && this.inputs.has(p.id)) {
@@ -113,13 +107,16 @@ this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
           }
           if (d.type === 'leaveGame') this.end('left')
         } catch {}
-      })
-
-      p.ws.on('close', () => this.end('dc'))
+      }
+      const onClose = () => this.end('dc')
+      p._gHandlers = { onMessage, onClose }
+      p.ws.on('message', onMessage)
+      p.ws.on('close', onClose)
     })
 
     this.loop = setInterval(() => this.tick(), 1000 / 30)
   }
+
 
 _spawnBullet(ownerId, x, y, angle, spec, width) {
   const bspec = BULLET_DEFS[spec] || BULLET_DEFS.Basic
@@ -361,18 +358,26 @@ const payload = {
   broadcast(obj) {
     for (const p of this.players) safeSend(p.ws, obj)
   }
-
-  end(reason = 'end', details = {}) {
-    if (this.closed) return
-    this.closed = true
-    clearInterval(this.loop)
+end(reason = 'end', details = {}) {
+  if (this.closed) return
+  this.closed = true
+  clearInterval(this.loop)
+  try {
     this.players.forEach((p) => {
       safeSend(p.ws, { type: 'matchEnd', reason, ...details })
-      try { p.ws.removeAllListeners('message') } catch {}
-      try { p.ws.removeAllListeners('close') } catch {}
+      const h = p._gHandlers
+      if (h) {
+        try { p.ws.off?.('message', h.onMessage) } catch {}
+        try { p.ws.off?.('close',   h.onClose)   } catch {}
+        try { p.ws.removeListener?.('message', h.onMessage) } catch {}
+        try { p.ws.removeListener?.('close',   h.onClose)   } catch {}
+        p._gHandlers = null
+      }
     })
+  } finally {
     if (this.onEnd) this.onEnd(reason, details)
   }
+}
 }
 
 function getBoundingRadius(st) { return st.size }
