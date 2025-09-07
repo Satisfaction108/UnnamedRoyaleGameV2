@@ -10,8 +10,12 @@ export default class Game {
     this.speed = 300
     this.state = new Map()
     this.inputs = new Map()
-    this.closed = false
-    this.finishing = false
+this.closed = false
+this.finishing = false
+this.playerTeam = new Map(players.map(p => [p.id, (typeof p.team === 'number') ? p.team : null]))
+this.teamsEnabled = new Set([...this.playerTeam.values()].filter(t => t !== null)).size >= 2
+this.collideAllies = false   // set to true if you WANT ally-to-ally body collisions
+
 
     const spawn = [
       { x: this.bounds.w * 0.25, y: this.bounds.h * 0.5 },
@@ -272,20 +276,19 @@ for (const b of this.bullets) {
     const dx = st.x - b.x, dy = st.y - b.y
     const minD = r + b.r
     if (dx*dx + dy*dy <= minD*minD) {
-      // apply damage
+      const tTarget = this.playerTeam.get(p.id)
+      const tOwner = this.playerTeam.get(b.ownerId)
+      const sameTeam = this.teamsEnabled && tTarget !== null && tOwner !== null && tTarget === tOwner
+      if (sameTeam) continue
       st.health = Math.max(0, st.health - b.damage)
-
-      // 💥 knockback: push along bullet direction, scaled by bullet size
       const speed = Math.hypot(b.vx || 0, b.vy || 0) || 1
       const ux = (b.vx || 0) / speed
       const uy = (b.vy || 0) / speed
-      const KNOCK_PER_SIZE = 10   // tweak feel here
+      const KNOCK_PER_SIZE = 10
       const bulletSize = b.size ?? b.r ?? 3
       const impulse = KNOCK_PER_SIZE * bulletSize
       st.knockVx = (st.knockVx || 0) + ux * impulse
       st.knockVy = (st.knockVy || 0) + uy * impulse
-
-      // bullet consumed
       b.health = 0
     }
   }
@@ -293,32 +296,44 @@ for (const b of this.bullets) {
 this.bullets = this.bullets.filter(b => b.health > 0)
 
 
-    for (let i = 0; i < this.players.length; i++) {
-      for (let j = i + 1; j < this.players.length; j++) {
-        const aId = this.players[i].id
-        const bId = this.players[j].id
-        const A = this.state.get(aId)
-        const B = this.state.get(bId)
-        if (!A?.alive || !B?.alive) continue
-        const shapeA = buildShape(A)
-        const shapeB = buildShape(B)
-        const mtv = computeMTV(shapeA, shapeB)
-        if (mtv.overlap) {
-          const pushX = (mtv.axis.x * mtv.depth) / 2
-          const pushY = (mtv.axis.y * mtv.depth) / 2
-          A.x -= pushX; A.y -= pushY
-          B.x += pushX; B.y += pushY
-          const rA = getBoundingRadius(A)
-          const rB = getBoundingRadius(B)
-          A.x = clamp(A.x, rA, this.bounds.w - rA)
-          A.y = clamp(A.y, rA, this.bounds.h - rA)
-          B.x = clamp(B.x, rB, this.bounds.w - rB)
-          B.y = clamp(B.y, rB, this.bounds.h - rB)
-          A.health -= B.bodyDamage * dt
-          B.health -= A.bodyDamage * dt
-        }
+
+   for (let i = 0; i < this.players.length; i++) {
+  for (let j = i + 1; j < this.players.length; j++) {
+    const aId = this.players[i].id
+    const bId = this.players[j].id
+    const A = this.state.get(aId)
+    const B = this.state.get(bId)
+    if (!A?.alive || !B?.alive) continue
+
+    // team check up front
+    const teamA = this.playerTeam.get(aId)
+    const teamB = this.playerTeam.get(bId)
+    const sameTeam = this.teamsEnabled && teamA !== null && teamB !== null && teamA === teamB
+    if (sameTeam && this.collideAllies === false) continue  // 👈 ghost teammates: no push, no damage
+
+    const shapeA = buildShape(A)
+    const shapeB = buildShape(B)
+    const mtv = computeMTV(shapeA, shapeB)
+    if (mtv.overlap) {
+      const pushX = (mtv.axis.x * mtv.depth) / 2
+      const pushY = (mtv.axis.y * mtv.depth) / 2
+      A.x -= pushX; A.y -= pushY
+      B.x += pushX; B.y += pushY
+      const rA = getBoundingRadius(A)
+      const rB = getBoundingRadius(B)
+      A.x = clamp(A.x, rA, this.bounds.w - rA)
+      A.y = clamp(A.y, rA, this.bounds.h - rA)
+      B.x = clamp(B.x, rB, this.bounds.w - rB)
+      B.y = clamp(B.y, rB, this.bounds.h - rB)
+
+      // still block ram damage for allies when collisions are enabled
+      if (!sameTeam) {
+        A.health -= B.bodyDamage * dt
+        B.health -= A.bodyDamage * dt
       }
     }
+  }
+
 
     for (const p of this.players) {
       const st = this.state.get(p.id)
@@ -399,7 +414,7 @@ safeSend(viewer.ws, { type: 'state', ts: nowTs, players: playersOut, bullets: bu
 
 // (removed stray this.broadcast(payload))
 
-  }
+  }}
 
   broadcast(obj) {
     for (const p of this.players) safeSend(p.ws, obj)
