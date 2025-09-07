@@ -43,22 +43,32 @@ export default class Game {
       const def = TANK_DEFS[tk]
       const bodyDamage = Math.round(20 + def.size * 3)
       const barrels = (def.barrels || []).map(normBarrel)
-      this.state.set(p.id, {
-        x: spawn[i % spawn.length].x,
-        y: spawn[i % spawn.length].y,
-        rot: 0,
-        size: def.size,
-        health: def.maxHealth,
-        maxHealth: def.maxHealth,
-        bodyDamage,
-        alive: true,
-        tankId: tk,
-        shape: def.shape,
-        barrels,
-        reloadTimers: new Array(barrels.length).fill(0),
-      })
-      this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
+this.state.set(p.id, {
+  x: spawn[i % spawn.length].x,
+  y: spawn[i % spawn.length].y,
+  rot: 0,
+  size: def.size,
+  health: def.maxHealth,
+  maxHealth: def.maxHealth,
+  bodyDamage,
+  alive: true,
+  tankId: tk,
+  shape: def.shape,
+  barrels,
+  reloadTimers: new Array(barrels.length).fill(0),
+
+  // 🔁 knockback velocity (world units per second)
+  knockVx: 0,
+  knockVy: 0,
+})
+
+// ✅ make sure inputs exist so movement works
+this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
     })
+
+
+
+
 
     const tanksForPlayers = players.map(p => {
       const st = this.state.get(p.id)
@@ -171,18 +181,34 @@ _spawnBullet(ownerId, x, y, angle, spec, width) {
       }
     }
 
-    for (const p of this.players) {
-      const inp = this.inputs.get(p.id)
-      const st = this.state.get(p.id)
-      if (!inp || !st || !st.alive) continue
-      let dx = (inp.d ? 1 : 0) - (inp.a ? 1 : 0)
-      let dy = (inp.s ? 1 : 0) - (inp.w ? 1 : 0)
-      const len = Math.hypot(dx, dy)
-      if (len > 0) { dx /= len; dy /= len }
-      const r = getBoundingRadius(st)
-      st.x = clamp(st.x + dx * this.speed * dt, r, this.bounds.w - r)
-      st.y = clamp(st.y + dy * this.speed * dt, r, this.bounds.h - r)
-    }
+for (const p of this.players) {
+  const inp = this.inputs.get(p.id)
+  const st = this.state.get(p.id)
+  if (!inp || !st || !st.alive) continue
+  let dx = (inp.d ? 1 : 0) - (inp.a ? 1 : 0)
+  let dy = (inp.s ? 1 : 0) - (inp.w ? 1 : 0)
+  const len = Math.hypot(dx, dy)
+  if (len > 0) { dx /= len; dy /= len }
+
+  // base movement
+  st.x += dx * this.speed * dt
+  st.y += dy * this.speed * dt
+
+  // ➕ apply knockback velocity then decay
+  st.x += (st.knockVx || 0) * dt
+  st.y += (st.knockVy || 0) * dt
+
+  // viscous damping (tune as you like)
+  const DAMP = 4.0
+  st.knockVx = (st.knockVx || 0) * Math.max(0, 1 - DAMP * dt)
+  st.knockVy = (st.knockVy || 0) * Math.max(0, 1 - DAMP * dt)
+
+  // keep inside arena
+  const r = getBoundingRadius(st)
+  st.x = clamp(st.x, r, this.bounds.w - r)
+  st.y = clamp(st.y, r, this.bounds.h - r)
+}
+
 
     for (const b of this.bullets) {
       b.x += b.vx * dt
@@ -222,22 +248,36 @@ _spawnBullet(ownerId, x, y, angle, spec, width) {
     }
     this.bullets = this.bullets.filter(Boolean)
 
-    const now = Date.now()
-    for (const b of this.bullets) {
-      for (const p of this.players) {
-        const st = this.state.get(p.id)
-        if (!st?.alive) continue
-        if (p.id === b.ownerId && now - b.bornAt < 120) continue
-        const r = getBoundingRadius(st)
-        const dx = st.x - b.x, dy = st.y - b.y
-        const minD = r + b.r
-        if (dx*dx + dy*dy <= minD*minD) {
-          st.health = Math.max(0, st.health - b.damage)
-          b.health = 0
-        }
-      }
+const now = Date.now()
+for (const b of this.bullets) {
+  for (const p of this.players) {
+    const st = this.state.get(p.id)
+    if (!st?.alive) continue
+    if (p.id === b.ownerId && now - b.bornAt < 120) continue
+    const r = getBoundingRadius(st)
+    const dx = st.x - b.x, dy = st.y - b.y
+    const minD = r + b.r
+    if (dx*dx + dy*dy <= minD*minD) {
+      // apply damage
+      st.health = Math.max(0, st.health - b.damage)
+
+      // 💥 knockback: push along bullet direction, scaled by bullet size
+      const speed = Math.hypot(b.vx || 0, b.vy || 0) || 1
+      const ux = (b.vx || 0) / speed
+      const uy = (b.vy || 0) / speed
+      const KNOCK_PER_SIZE = 10   // tweak feel here
+      const bulletSize = b.size ?? b.r ?? 3
+      const impulse = KNOCK_PER_SIZE * bulletSize
+      st.knockVx = (st.knockVx || 0) + ux * impulse
+      st.knockVy = (st.knockVy || 0) + uy * impulse
+
+      // bullet consumed
+      b.health = 0
     }
-    this.bullets = this.bullets.filter(b => b.health > 0)
+  }
+}
+this.bullets = this.bullets.filter(b => b.health > 0)
+
 
     for (let i = 0; i < this.players.length; i++) {
       for (let j = i + 1; j < this.players.length; j++) {
