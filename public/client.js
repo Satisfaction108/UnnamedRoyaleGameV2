@@ -68,6 +68,12 @@ let countdownActive = false
 let rosterSlide = 0            // 0 = shown, 1 = fully pulled up
 let rosterCache = []           // from matchStart.roster
 
+// 🌫️ dark overlay (0..1 alpha)
+let overlayAlpha = 0           // current opacity
+const OVERLAY_ON = 0.60        // 60% during countdown
+const OVERLAY_FADE_PER_SEC = 1.8 // fade speed after start (~330ms from .6 → 0)
+
+
 
   let mouseCssX = 0, mouseCssY = 0
   let lastAimSent = 0
@@ -108,6 +114,10 @@ battleStartAt = (typeof m.battleStartAt === 'number') ? m.battleStartAt : 0
 countdownActive = battleStartAt > 0
 rosterSlide = 0
 rosterCache = Array.isArray(m.roster) ? m.roster.slice() : []
+
+// 🌫️ turn on the dark overlay for the countdown
+overlayAlpha = OVERLAY_ON
+
 
 // reset damage flash memory
 hurtUntil.clear()
@@ -465,14 +475,22 @@ const players = getInterpolated(renderServerTime)
 // ⏱ server-time countdown (no INTERP delay)
 if (countdownActive && battleStartAt) {
   const nowServer = Date.now() - serverOffset
+  // keep overlay locked at 60% while waiting
+  overlayAlpha = OVERLAY_ON
   if (nowServer >= battleStartAt) {
     countdownActive = false
     announceText = 'Battle!'
     announceUntil = performance.now() + 1200
   }
-} else if (rosterSlide < 1) {
+} else {
+  // fade overlay out after start
+  if (overlayAlpha > 0) {
+    overlayAlpha = Math.max(0, overlayAlpha - OVERLAY_FADE_PER_SEC * dt)
+  }
   // pull the roster up and away after start
-  rosterSlide = Math.min(1, rosterSlide + dt * 1.6)
+  if (rosterSlide < 1) {
+    rosterSlide = Math.min(1, rosterSlide + dt * 1.6)
+  }
 }
 
 
@@ -877,9 +895,12 @@ function updateRecoil(dt) {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
 
-    // subtle veil
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'
-    ctx.fillRect(0, 0, viewW, viewH)
+// dark overlay that fades out after start
+if (overlayAlpha > 0) {
+  ctx.fillStyle = `rgba(0,0,0,${overlayAlpha.toFixed(3)})`
+  ctx.fillRect(0, 0, viewW, viewH)
+}
+
 
     // header
     ctx.font = '600 22px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
@@ -963,20 +984,40 @@ function drawRosterColumn(cx, cy, cw, ch, list, allies) {
 
 function drawTankIcon(x, y, t, allies) {
   const sides = t?.shape ?? 0
-  const size = Math.max(10, Math.min(16, (t?.size || 16) * 0.7)) * zoom
+  const bodyR = Math.max(10, Math.min(16, (t?.size || 16) * 0.7)) * zoom
   const sx = Math.round(x)
   const sy = Math.round(y)
+  const baseAngle = allies ? 0 : Math.PI     // face each other
+  const uiScale = 0.7                        // shrink world dims for UI icon
+
   ctx.save()
   ctx.lineWidth = 3
+
+  // --- BARRELS (if any) ---
+  if (t?.barrels?.length) {
+    ctx.fillStyle = '#9ca3af'
+    ctx.strokeStyle = '#4b5563'
+    for (let i = 0; i < t.barrels.length; i++) {
+      const bb = readBarrel(t.barrels[i])
+      const len = (bb.length || 0) * uiScale * zoom
+      const wid = (bb.width  || 6) * uiScale * zoom
+      const fwd = (bb.forwardOffset   || 0) * uiScale * zoom
+      const side = (bb.sidewaysOffset || 0) * uiScale * zoom
+      const dir  = baseAngle + (bb.directionRadians || 0)
+      drawBarrelRot(sx, sy, len, wid, fwd, side, dir)
+    }
+  }
+
+  // --- HULL ---
   ctx.fillStyle = allies ? '#34d399' : '#60a5fa'
   ctx.strokeStyle = allies ? 'rgba(0,50,30,0.7)' : 'rgba(15,30,60,0.7)'
   if (sides === 0) {
-    ctx.beginPath(); ctx.arc(sx, sy, size, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+    ctx.beginPath(); ctx.arc(sx, sy, bodyR, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
   } else {
     const verts = []
     for (let i = 0; i < sides; i++) {
-      const a = (i * 2 * Math.PI) / sides
-      verts.push({ x: sx + Math.cos(a) * size, y: sy + Math.sin(a) * size })
+      const a = baseAngle + (i * 2 * Math.PI) / sides
+      verts.push({ x: sx + Math.cos(a) * bodyR, y: sy + Math.sin(a) * bodyR })
     }
     ctx.beginPath(); ctx.moveTo(verts[0].x, verts[0].y)
     for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y)
@@ -984,6 +1025,7 @@ function drawTankIcon(x, y, t, allies) {
   }
   ctx.restore()
 }
+
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
   function onExitClick() {
