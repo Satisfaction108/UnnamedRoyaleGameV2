@@ -12,7 +12,9 @@
   const ZOOM_MAX = 3.0
   const ZOOM_SMOOTH = 0.22
   const ZOOM_STEP_KEYS = 1.12
-  const ZOOM_WHEEL_BASE = 1.0015
+const ZOOM_WHEEL_BASE = 1.0015
+const FOV_MARGIN = 100   // world-unit padding so client view < server FOV (prevents pop-in)
+
 
   let ws = null
   let canvas = null
@@ -204,13 +206,15 @@ snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsM
 
     const me = map.get(myId)
     const newSpectator = me ? !me.alive : true
-    if (newSpectator !== isSpectator) {
-      isSpectator = newSpectator
-      if (!isSpectator) {
-        targetZoom = zoom = 1
-        specKeys.up = specKeys.left = specKeys.down = specKeys.right = false
-      }
-    }
+if (newSpectator !== isSpectator) {
+  isSpectator = newSpectator
+  if (!isSpectator) {
+    // keep current zoom; next frame we auto-fit to cameraSize FOV
+    targetZoom = zoom
+    specKeys.up = specKeys.left = specKeys.down = specKeys.right = false
+  }
+}
+
     return true
   }
 
@@ -297,12 +301,14 @@ function onPointerUp() {
 }
 
 
-  function onWheel(e) {
-    if (!isSpectator) return
-    e.preventDefault()
-    const factor = Math.pow(ZOOM_WHEEL_BASE, e.deltaY)
-    targetZoom = clamp(targetZoom * factor, ZOOM_MIN, ZOOM_MAX)
-  }
+function onWheel(e) {
+  if (!isSpectator) return
+  e.preventDefault()
+  // reverse direction: wheel up -> zoom in
+  const factor = Math.pow(ZOOM_WHEEL_BASE, -e.deltaY)
+  targetZoom = clamp(targetZoom * factor, ZOOM_MIN, ZOOM_MAX)
+}
+
 
   function onResize() {
     const newDpr = Math.min(window.devicePixelRatio || 1, 3)
@@ -406,8 +412,18 @@ function getInterpolatedBullets(renderServerTime) {
   const dt = Math.max(0.001, (now - lastFrameTs) / 1000)
   lastFrameTs = now
 
-  zoom += (targetZoom - zoom) * ZOOM_SMOOTH
-  if (!isSpectator) zoom = targetZoom = 1
+if (!isSpectator) {
+  // Fit the entire screen inside the server FOV square (minus margin)
+  const myTank = tanks.get(myId)
+  const csRaw = (myTank?.cameraSize ?? 500)
+  const half = Math.max(64, csRaw - FOV_MARGIN)  // shrink a bit vs server to hide cull edge
+  // We must ensure both width and height fit inside 2*half
+  const needZoomW = viewW / (2 * half)
+  const needZoomH = viewH / (2 * half)
+  targetZoom = Math.max(needZoomW, needZoomH)
+}
+zoom += (targetZoom - zoom) * ZOOM_SMOOTH
+
 
   const renderServerTime = Date.now() - serverOffset - INTERP_DELAY_MS
   const players = getInterpolated(renderServerTime)

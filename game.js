@@ -40,9 +40,11 @@ export default class Game {
 
     players.forEach((p, i) => {
       const tk = tankKeys[Math.floor(Math.random() * tankKeys.length)]
-      const def = TANK_DEFS[tk]
-      const bodyDamage = Math.round(20 + def.size * 3)
-      const barrels = (def.barrels || []).map(normBarrel)
+const def = TANK_DEFS[tk]
+const moveSpeed = (typeof def.movementSpeed === 'number') ? def.movementSpeed : 300
+const bodyDamage = (typeof def.bodyDamage === 'number') ? def.bodyDamage : Math.round(20 + def.size * 3)
+const cameraSize = (typeof def.cameraSize === 'number') ? def.cameraSize : 500
+const barrels = (def.barrels || []).map(normBarrel)
 this.state.set(p.id, {
   x: spawn[i % spawn.length].x,
   y: spawn[i % spawn.length].y,
@@ -51,28 +53,36 @@ this.state.set(p.id, {
   health: def.maxHealth,
   maxHealth: def.maxHealth,
   bodyDamage,
+  movementSpeed: moveSpeed,
+  cameraSize,               // 👈 per-tank FOV half-size for server culling (square)
   alive: true,
   tankId: tk,
   shape: def.shape,
   barrels,
   reloadTimers: new Array(barrels.length).fill(0),
-
-  // 🔁 knockback velocity (world units per second)
   knockVx: 0,
   knockVy: 0,
 })
 
+
+
 // ✅ make sure inputs exist so movement works
 this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
     })
+const tanksForPlayers = players.map(p => {
+  const st = this.state.get(p.id)
+  return {
+    id: p.id,
+    tank: {
+      name: st.tankId,
+      shape: st.shape,
+      size: st.size,
+      barrels: st.barrels,
+      cameraSize: st.cameraSize,   // 👈 send per-tank FOV half-size to client
+    },
+  }
+})
 
-    const tanksForPlayers = players.map(p => {
-      const st = this.state.get(p.id)
-            return {
-        id: p.id,
-        tank: { name: st.tankId, shape: st.shape, size: st.size, barrels: st.barrels },
-      }
-    })
 
     players.forEach((p) => {
       const st = this.state.get(p.id)
@@ -191,8 +201,10 @@ for (const p of this.players) {
   if (len > 0) { dx /= len; dy /= len }
 
   // base movement
-  st.x += dx * this.speed * dt
-  st.y += dy * this.speed * dt
+const ms = (typeof st.movementSpeed === 'number') ? st.movementSpeed : this.speed
+st.x += dx * ms * dt
+st.y += dy * ms * dt
+
 
   // ➕ apply knockback velocity then decay
   st.x += (st.knockVx || 0) * dt
@@ -332,12 +344,31 @@ this.bullets = this.bullets.filter(b => b.health > 0)
       }
     }
 
-const payload = {
-  type: 'state',
-  ts: Date.now(),
-  players: this.players.map((p) => {
+const nowTs = Date.now()
+for (const viewer of this.players) {
+  const vst = this.state.get(viewer.id)
+  if (!vst) continue
+
+  // spectators (dead) get full state so they can freely spectate
+  const spectating = !vst.alive
+
+  // build view rectangle (square) centered on viewer
+  const HALF = Math.max(64, (vst.cameraSize ?? 500))
+  const PAD = 150 // small pad to reduce pop-in at edges
+  const L = (vst.x - HALF) - PAD
+  const T = (vst.y - HALF) - PAD
+  const R = (vst.x + HALF) + PAD
+  const B = (vst.y + HALF) + PAD
+
+  const playersOut = []
+  for (const p of this.players) {
     const st = this.state.get(p.id)
-    return {
+    if (!st) continue
+    if (!spectating) {
+      const r = getBoundingRadius(st)
+      if (!rectCircleIntersect(L, T, R, B, st.x, st.y, r)) continue
+    }
+    playersOut.push({
       id: p.id,
       x: st.x, y: st.y,
       rot: st.rot,
@@ -345,17 +376,24 @@ const payload = {
       health: st.health, maxHealth: st.maxHealth,
       alive: st.alive,
       shape: st.shape,
+    })
+  }
+
+  const bulletsOut = []
+  for (const b of this.bullets) {
+    if (spectating || rectCircleIntersect(L, T, R, B, b.x, b.y, b.r)) {
+      bulletsOut.push({
+        id: b.id, ownerId: b.ownerId, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
+        r: b.r, size: b.size, sides: b.sides, strokeWidth: b.strokeWidth
+      })
     }
-  }),
-  bullets: this.bullets.map(b => ({
-    id: b.id, ownerId: b.ownerId, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
-    r: b.r, size: b.size, sides: b.sides, strokeWidth: b.strokeWidth
-  }))
+  }
+
+safeSend(viewer.ws, { type: 'state', ts: nowTs, players: playersOut, bullets: bulletsOut })
 }
 
+// (removed stray this.broadcast(payload))
 
-
-    this.broadcast(payload)
   }
 
   broadcast(obj) {
@@ -421,4 +459,12 @@ function centroid(verts){ let x=0,y=0; for(const v of verts){ x+=v.x;y+=v.y } co
 function normalize(v){ const m=Math.hypot(v.x,v.y); if(m===0) return {x:1,y:0}; return {x:v.x/m,y:v.y/m} }
 function normalizeAngle(a){ const two=Math.PI*2; a=((a%two)+two)%two; if(a>Math.PI)a-=two; return a }
 function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)) }
+function rectCircleIntersect(L, T, R, B, cx, cy, r) {
+  const clx = clamp(cx, L, R)
+  const cly = clamp(cy, T, B)
+  const dx = cx - clx
+  const dy = cy - cly
+  return (dx * dx + dy * dy) <= r * r
+}
+
 function safeSend(ws,obj){ try{ if(ws&&ws.readyState===1) ws.send(JSON.stringify(obj)) }catch{} }
