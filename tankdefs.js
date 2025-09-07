@@ -15,7 +15,7 @@ const TANK_DEFS = {
 
   Square: {
     maxHealth: 180,
-    size: 18,
+    size: 30,
     shape: 4,
     barrels: [
       { length: 18, width: 6, forwardOffset: 10, sidewaysOffset: 0, directionRadians: 0.0, bulletType: 'Basic', reload: 0.35 },
