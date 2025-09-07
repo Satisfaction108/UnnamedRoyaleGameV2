@@ -38,6 +38,15 @@ const tanks = new Map()
 const hurtUntil = new Map()      // id -> timestamp (performance.now()) until which we flash
 const lastHealthSeen = new Map() // id -> last health we saw from server
 
+// recoil state (per player -> per-barrel value in [0..1])
+const recoil = new Map()
+// tuning
+const RECOIL_KICK = 1.0                 // how hard the kick sets the value
+const RECOIL_RECOVER_PER_S = 7.0        // how fast it returns to 0
+const RECOIL_DIST_SCALE = 0.35          // travel fraction of barrel length
+const RECOIL_DIST_MIN = 4               // minimum world-units travel
+
+
 
   const camera = { x: 0, y: 0 }
   let zoom = 1
@@ -76,6 +85,10 @@ if (Array.isArray(m.tanks)) m.tanks.forEach(({ id, tank }) => tanks.set(id, tank
 // reset damage flash memory
 hurtUntil.clear()
 lastHealthSeen.clear()
+
+// reset recoil
+recoil.clear()
+
 
 
   canvas = $('gameCanvas')
@@ -130,6 +143,8 @@ names.clear()
 tanks.clear()
 hurtUntil.clear()
 lastHealthSeen.clear()
+recoil.clear()
+
 
 
   mouseDown = false
@@ -170,7 +185,20 @@ for (const p of msg.players || []) {
 const bulletsMap = new Map()
 for (const b of (msg.bullets || [])) bulletsMap.set(b.id, b)
 
+// 🔁 recoil: kick when a NEW bullet appears (compare with prev snapshot)
+const prevBullets = snapshots.length ? snapshots[snapshots.length - 1].bullets : undefined
+if (msg.bullets && msg.bullets.length) {
+  for (const b of msg.bullets) {
+    const isNew = !prevBullets || !prevBullets.has(b.id)
+    if (isNew && b.ownerId) {
+      const ang = Math.atan2(b.vy || 0, b.vx || 0)
+      kickRecoil(b.ownerId, ang, map)
+    }
+  }
+}
+
 snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsMap })
+
 
     if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
 
@@ -408,6 +436,10 @@ function getInterpolatedBullets(renderServerTime) {
     }
   }
 
+  // recoil decay
+  updateRecoil(dt)
+
+
   camera.x = clamp(camera.x, 0, world.w)
   camera.y = clamp(camera.y, 0, world.h)
 
@@ -490,21 +522,31 @@ function getInterpolatedBullets(renderServerTime) {
     const fill = !p.alive ? '#4b5563' : (p.id === myId ? '#34d399' : '#60a5fa')
     const stroke = darker(fill, 0.6)
 
-    // draw barrels
-    if (tank?.barrels?.length) {
-      ctx.lineWidth = STROKE_W
-      ctx.fillStyle = '#9ca3af'
-      ctx.strokeStyle = '#4b5563'
-      for (const b of tank.barrels) {
-        const bb = readBarrel(b)
-        const len = (bb.length || 0) * zoom
-        const wid = (bb.width || 0) * zoom
-        const fwd = (bb.forwardOffset || 0) * zoom
-        const side = (bb.sidewaysOffset || 0) * zoom
-        const dir = (bb.directionRadians || 0) + (p.rot || 0)
-        drawBarrelRot(x, y, len, wid, fwd, side, dir)
-      }
-    }
+if (tank?.barrels?.length) {
+  ensureRecoilArrayFor(p.id, tank.barrels.length)
+  ctx.lineWidth = STROKE_W
+  ctx.fillStyle = '#9ca3af'
+  ctx.strokeStyle = '#4b5563'
+  for (let bi = 0; bi < tank.barrels.length; bi++) {
+    const b = tank.barrels[bi]
+    const bb = readBarrel(b)
+    const lenWorld = (bb.length || 0)
+    const len = lenWorld * zoom
+    const wid = (bb.width || 0) * zoom
+    const baseFwdWorld = (bb.forwardOffset || 0)
+    const side = (bb.sidewaysOffset || 0) * zoom
+    const dir = (bb.directionRadians || 0) + (p.rot || 0)
+
+    // recoil distance in world units, scaled by current recoil value
+    const rArr = recoil.get(p.id)
+    const rVal = rArr ? rArr[bi] || 0 : 0
+    const recoilWorld = (Math.max(RECOIL_DIST_MIN, lenWorld * RECOIL_DIST_SCALE)) * rVal
+
+    const fwd = (baseFwdWorld - recoilWorld) * zoom
+    drawBarrelRot(x, y, len, wid, fwd, side, dir)
+  }
+}
+
 
     // body
     ctx.lineWidth = STROKE_W
@@ -699,6 +741,43 @@ function drawBullets(bullets) {
     }
     return out
   }
+  function ensureRecoilArrayFor(pid, n) {
+  let arr = recoil.get(pid)
+  if (!arr || arr.length !== n) {
+    arr = new Float32Array(n)
+    recoil.set(pid, arr)
+  }
+}
+
+function kickRecoil(ownerId, bulletAngle, recentPlayersMap) {
+  const tank = tanks.get(ownerId)
+  if (!tank?.barrels?.length) return
+  ensureRecoilArrayFor(ownerId, tank.barrels.length)
+  const arr = recoil.get(ownerId)
+  const shooter = recentPlayersMap?.get(ownerId)
+  const rot = shooter?.rot || 0
+
+  // pick the barrel whose forward direction is closest to the bullet's angle
+  let bestI = 0, bestDiff = Infinity
+  for (let i = 0; i < tank.barrels.length; i++) {
+    const bb = readBarrel(tank.barrels[i])
+    const dir = rot + (bb.directionRadians || 0)
+    const diff = Math.abs(angleDelta(bulletAngle, dir))
+    if (diff < bestDiff) { bestDiff = diff; bestI = i }
+  }
+
+  arr[bestI] = Math.min(1, arr[bestI] + RECOIL_KICK)
+}
+
+function updateRecoil(dt) {
+  const k = RECOIL_RECOVER_PER_S * dt
+  for (const [pid, arr] of recoil) {
+    for (let i = 0; i < arr.length; i++) {
+      arr[i] = Math.max(0, arr[i] - k)
+    }
+  }
+}
+
   function darker(hex, f = 0.6) {
     const { r, g, b } = hexToRgb(hex)
     return `rgb(${Math.max(0, (r * f) | 0)},${Math.max(0, (g * f) | 0)},${Math.max(0, (b * f) | 0)})`

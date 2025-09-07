@@ -308,10 +308,11 @@ const payload = {
     }
   }),
   bullets: this.bullets.map(b => ({
-    id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
+    id: b.id, ownerId: b.ownerId, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
     r: b.r, size: b.size, sides: b.sides, strokeWidth: b.strokeWidth
   }))
 }
+
 
 
     this.broadcast(payload)
