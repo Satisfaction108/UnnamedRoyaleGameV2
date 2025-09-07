@@ -31,8 +31,13 @@
   const snapshots = []
   let serverOffset = 0
 
-  const names = new Map()
-  const tanks = new Map()
+const names = new Map()
+const tanks = new Map()
+
+// damage flash state
+const hurtUntil = new Map()      // id -> timestamp (performance.now()) until which we flash
+const lastHealthSeen = new Map() // id -> last health we saw from server
+
 
   const camera = { x: 0, y: 0 }
   let zoom = 1
@@ -63,10 +68,15 @@ const FIRE_INTERVAL_MS = 60  // client throttle; server still enforces reloads
   myId = m.you
   world = { w: m.w || 2000, h: m.h || 2000 }
 
-  names.clear()
-  if (Array.isArray(m.roster)) m.roster.forEach((r) => names.set(r.id, r.name || `P-${String(r.id).slice(0, 4)}`))
-  tanks.clear()
-  if (Array.isArray(m.tanks)) m.tanks.forEach(({ id, tank }) => tanks.set(id, tank))
+names.clear()
+if (Array.isArray(m.roster)) m.roster.forEach((r) => names.set(r.id, r.name || `P-${String(r.id).slice(0, 4)}`))
+tanks.clear()
+if (Array.isArray(m.tanks)) m.tanks.forEach(({ id, tank }) => tanks.set(id, tank))
+
+// reset damage flash memory
+hurtUntil.clear()
+lastHealthSeen.clear()
+
 
   canvas = $('gameCanvas')
   ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
@@ -116,8 +126,11 @@ function stop() {
 
   $('gameView') && ($('gameView').hidden = true)
   snapshots.length = 0
-  names.clear()
-  tanks.clear()
+names.clear()
+tanks.clear()
+hurtUntil.clear()
+lastHealthSeen.clear()
+
 
   mouseDown = false
   autofireEnabled = false
@@ -134,23 +147,31 @@ function handle(msg) {
       const estimate = Date.now() - msg.ts
       serverOffset += (estimate - serverOffset) * OFFSET_SMOOTH
     }
-    const map = new Map()
-    for (const p of msg.players || []) {
-      map.set(p.id, {
-        x: p.x, y: p.y,
-        rot: p.rot ?? 0,
-        size: p.size,
-        health: p.health, maxHealth: p.maxHealth,
-        alive: p.alive !== false,
-        shape: p.shape ?? (tanks.get(p.id)?.shape || 0),
-      })
-    }
+const map = new Map()
+for (const p of msg.players || []) {
+  map.set(p.id, {
+    x: p.x, y: p.y,
+    rot: p.rot ?? 0,
+    size: p.size,
+    health: p.health, maxHealth: p.maxHealth,
+    alive: p.alive !== false,
+    shape: p.shape ?? (tanks.get(p.id)?.shape || 0),
+  })
 
-    // store bullets as a Map keyed by id for interpolation
-    const bulletsMap = new Map()
-    for (const b of (msg.bullets || [])) bulletsMap.set(b.id, b)
+  // 👇 damage detection: if health dropped vs last snapshot, start a flash
+  const prev = lastHealthSeen.get(p.id)
+  if (typeof prev === 'number' && p.health < prev) {
+    hurtUntil.set(p.id, performance.now() + 200) // ~200ms flash
+  }
+  lastHealthSeen.set(p.id, p.health)
+}
 
-    snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsMap })
+// store bullets as a Map keyed by id for interpolation
+const bulletsMap = new Map()
+for (const b of (msg.bullets || [])) bulletsMap.set(b.id, b)
+
+snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsMap })
+
     if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
 
     const me = map.get(myId)
@@ -449,62 +470,86 @@ function onPointerUp() {
   }
 
   function drawPlayers(ps) {
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'bottom'
-    ctx.font = '20px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-    for (const p of ps) {
-      const tank = tanks.get(p.id)
-      const x = worldToScreenX(p.x)
-      const y = worldToScreenY(p.y)
-      const rWorld = Math.max(8, p.size || tank?.size || 16)
-      const r = rWorld * zoom
-      const fill = !p.alive ? '#4b5563' : (p.id === myId ? '#34d399' : '#60a5fa')
-      const stroke = darker(fill, 0.6)
-      if (tank?.barrels?.length) {
-        ctx.lineWidth = STROKE_W
-        ctx.fillStyle = '#9ca3af'
-        ctx.strokeStyle = '#4b5563'
-        for (const b of tank.barrels) {
-          const bb = readBarrel(b)
-          const len = (bb.length || 0) * zoom
-          const wid = (bb.width || 0) * zoom
-          const fwd = (bb.forwardOffset || 0) * zoom
-          const side = (bb.sidewaysOffset || 0) * zoom
-          const dir = (bb.directionRadians || 0) + (p.rot || 0)
-          drawBarrelRot(x, y, len, wid, fwd, side, dir)
-        }
-      }
+  const now = performance.now()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  ctx.font = '20px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+  for (const p of ps) {
+    const tank = tanks.get(p.id)
+    const x = worldToScreenX(p.x)
+    const y = worldToScreenY(p.y)
+    const rWorld = Math.max(8, p.size || tank?.size || 16)
+    const r = rWorld * zoom
+    const fill = !p.alive ? '#4b5563' : (p.id === myId ? '#34d399' : '#60a5fa')
+    const stroke = darker(fill, 0.6)
+
+    // draw barrels
+    if (tank?.barrels?.length) {
       ctx.lineWidth = STROKE_W
-      ctx.fillStyle = fill
-      ctx.strokeStyle = stroke
-      const sides = tank?.shape ?? p.shape ?? 0
-      if (sides === 0) {
-        ctx.beginPath()
-        ctx.arc(x, y, r, 0, Math.PI * 2)
-        ctx.fill(); ctx.stroke()
-      } else {
-        const verts = regularPolygonScreen(x, y, r, sides, p.rot || 0)
-        ctx.beginPath()
-        ctx.moveTo(verts[0].x, verts[0].y)
-        for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y)
-        ctx.closePath()
-        ctx.fill(); ctx.stroke()
+      ctx.fillStyle = '#9ca3af'
+      ctx.strokeStyle = '#4b5563'
+      for (const b of tank.barrels) {
+        const bb = readBarrel(b)
+        const len = (bb.length || 0) * zoom
+        const wid = (bb.width || 0) * zoom
+        const fwd = (bb.forwardOffset || 0) * zoom
+        const side = (bb.sidewaysOffset || 0) * zoom
+        const dir = (bb.directionRadians || 0) + (p.rot || 0)
+        drawBarrelRot(x, y, len, wid, fwd, side, dir)
       }
-      const pct = Math.max(0, Math.min(1, (p.health || 0) / (p.maxHealth || 1)))
-      const barW = Math.max(30, r * 2)
-      const barH = 6
-      const barX = Math.round(x - barW / 2)
-      const barY = Math.round(y - r - 14)
-      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(barX, barY, barW, barH)
-      ctx.fillStyle = '#b91c1c'; ctx.fillRect(barX, barY, barW, barH)
-      ctx.fillStyle = '#22c55e'; ctx.fillRect(barX, barY, Math.round(barW * pct), barH)
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1
-      ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1)
-      const label = names.get(p.id) || `P-${String(p.id).slice(0, 4)}`
-      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.strokeText(label, x, barY - 4)
-      ctx.fillStyle = p.id === myId ? '#e6fff4' : '#f3f7ff'; ctx.fillText(label, x, barY - 4)
     }
+
+    // body
+    ctx.lineWidth = STROKE_W
+    ctx.fillStyle = fill
+    ctx.strokeStyle = stroke
+    const sides = tank?.shape ?? p.shape ?? 0
+    if (sides === 0) {
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill(); ctx.stroke()
+    } else {
+      const verts = regularPolygonScreen(x, y, r, sides, p.rot || 0)
+      ctx.beginPath()
+      ctx.moveTo(verts[0].x, verts[0].y)
+      for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y)
+      ctx.closePath()
+      ctx.fill(); ctx.stroke()
+    }
+
+    // 🔥 damage flash ring
+    const until = hurtUntil.get(p.id) || 0
+    const msLeft = until - now
+    if (msLeft > 0) {
+      const a = Math.min(1, Math.max(0, msLeft / 200))       // fade 0..1
+      const ringR = r * (1 + 0.22 * a)                       // slight expansion
+      ctx.save()
+      ctx.globalAlpha = 0.65 * a
+      ctx.lineWidth = Math.max(2, r * 0.25)
+      ctx.strokeStyle = 'rgb(255,64,64)'
+      ctx.beginPath()
+      ctx.arc(x, y, ringR, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    // health bar + name
+    const pct = Math.max(0, Math.min(1, (p.health || 0) / (p.maxHealth || 1)))
+    const barW = Math.max(30, r * 2)
+    const barH = 6
+    const barX = Math.round(x - barW / 2)
+    const barY = Math.round(y - r - 14)
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(barX, barY, barW, barH)
+    ctx.fillStyle = '#b91c1c'; ctx.fillRect(barX, barY, barW, barH)
+    ctx.fillStyle = '#22c55e'; ctx.fillRect(barX, barY, Math.round(barW * pct), barH)
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1
+    ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1)
+    const label = names.get(p.id) || `P-${String(p.id).slice(0, 4)}`
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.strokeText(label, x, barY - 4)
+    ctx.fillStyle = p.id === myId ? '#e6fff4' : '#f3f7ff'; ctx.fillText(label, x, barY - 4)
   }
+}
+
 
   function drawBullets(bullets) {
     if (!bullets?.length) return
