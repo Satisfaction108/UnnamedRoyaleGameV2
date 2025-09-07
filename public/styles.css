@@ -900,3 +900,163 @@ h2#loginTitle, h2#signupTitle {
     box-shadow: 0 8px 26px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.05);
     cursor: pointer;
 }
+#modeStack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    row-gap: calc(0.9 * var(--u));
+}
+
+#modeArrows {
+    display: flex;
+    align-items: center;
+    gap: calc(0.7 * var(--u));
+}
+
+#modeSelect::after {
+    display: none !important;
+}
+
+#queueControls::after {
+    content: none !important;
+}
+
+.mode-arrow {
+    position: relative;
+    width: calc(3.6 * var(--u));
+    height: calc(3.6 * var(--u));
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: radial-gradient(120% 120% at 50% 10%, #1e2637 0%, #111729 60%, #0b1020 100%);
+    box-shadow: 0 8px 26px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.05);
+    cursor: pointer;
+}
+
+    .mode-arrow::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: calc(1.2 * var(--u));
+        height: calc(1.2 * var(--u));
+        border-right: 3px solid rgba(255,255,255,.85);
+        border-bottom: 3px solid rgba(255,255,255,.85);
+        transform: translate(-50%,-65%) rotate(45deg);
+    }
+
+#modeCyclePrev.mode-arrow::before {
+    transform: translate(-50%,-65%) rotate(225deg);
+}
+
+.mode-arrow:active {
+    transform: translateY(1px)
+}
+/* hide native select but keep it accessible */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* wrapper anchors the popup */
+#modeSelectWrap {
+    position: relative;
+    min-width: calc(10 * var(--u));
+}
+
+/* closed control */
+#modeSelectBtn.select-display {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(.8 * var(--u));
+    width: 100%;
+    height: calc(4.2 * var(--u));
+    padding: 0 calc(1.6 * var(--u));
+    border-radius: calc(1.4 * var(--u));
+    background: linear-gradient(135deg, #1a2233, #0f1524);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,.14);
+    box-shadow: 0 6px 18px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.06);
+    font-weight: 800;
+    letter-spacing: .2px;
+    cursor: pointer;
+    transition: box-shadow var(--speed), border var(--speed), transform var(--speed);
+}
+
+    #modeSelectBtn.select-display:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 24px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.08);
+    }
+
+    #modeSelectBtn.select-display:focus-visible {
+        outline: none;
+        border-color: #6aa8ff;
+        box-shadow: 0 0 0 calc(.6 * var(--u)) rgba(85,140,255,.18), 0 6px 18px rgba(0,0,0,.35);
+    }
+
+/* caret animation */
+#modeSelectCaret {
+    opacity: .9;
+    transition: transform var(--speed), opacity var(--speed);
+}
+
+#modeSelectWrap[data-open="true"] #modeSelectCaret {
+    transform: rotate(180deg);
+    opacity: 1;
+}
+
+/* popup menu */
+#modeMenu.select-menu {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + .6 * var(--u));
+    margin: 0;
+    padding: calc(.6 * var(--u));
+    list-style: none;
+    background: linear-gradient(180deg, rgba(27,34,51,.98), rgba(14,20,36,.98));
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: calc(1.2 * var(--u));
+    box-shadow: 0 16px 36px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06);
+    backdrop-filter: blur(8px);
+    max-height: 40vh;
+    overflow: auto;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px) scale(.98);
+    transition: opacity var(--speed), transform var(--speed);
+    z-index: 40;
+}
+
+#modeSelectWrap[data-open="true"] #modeMenu.select-menu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+}
+
+/* options */
+.select-option {
+    padding: calc(1.1 * var(--u)) calc(1.2 * var(--u));
+    border-radius: calc(.9 * var(--u));
+    font-weight: 700;
+    color: #dfe7ff;
+    cursor: pointer;
+    transition: background var(--speed), color var(--speed), transform var(--speed);
+}
+
+    .select-option:hover {
+        background: rgba(255,255,255,.08);
+    }
+
+    .select-option[aria-selected="true"] {
+        background: linear-gradient(135deg, #2a3758, #1f2a44);
+        color: #ffffff;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    }

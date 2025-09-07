@@ -188,16 +188,78 @@ $('modeSelect')?.addEventListener('change', e=>{
   state.mode = e.target.value
 })
 
-// cycle modes on arrow click: 1v1 → 2v2 → 3v3 → 1v1
+// helper: update label + highlight current option
+function syncModeUI(val){
+  const label = $('modeSelectLabel')
+  if (label) label.textContent = val
+  const menu = $('modeMenu')
+  if (menu){
+    for (const li of menu.querySelectorAll('.select-option')){
+      li.setAttribute('aria-selected', li.dataset.value === val ? 'true' : 'false')
+    }
+  }
+}
+
+// helper: open/close custom menu
+function toggleModeMenu(open){
+  const wrap = $('modeSelectWrap')
+  const btn  = $('modeSelectBtn')
+  if(!wrap || !btn) return
+  wrap.setAttribute('data-open', open ? 'true' : '')
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false')
+  if(open) $('modeMenu')?.focus()
+}
+
+// native select -> state + UI
+$('modeSelect')?.addEventListener('change', e=>{
+  const val = e.target.value
+  state.mode = val
+  syncModeUI(val)
+})
+
+// arrows -> cycle native select (which triggers change)
 $('modeCycle')?.addEventListener('click', ()=>{
-  const sel = $('modeSelect')
-  if(!sel) return
+  const sel = $('modeSelect'); if(!sel) return
   const order = ['1v1','2v2','3v3']
   const i = Math.max(0, order.indexOf(sel.value))
-  const next = order[(i+1)%order.length]
-  sel.value = next
+  sel.value = order[(i+1) % order.length]
   sel.dispatchEvent(new Event('change'))
 })
+
+$('modeCyclePrev')?.addEventListener('click', ()=>{
+  const sel = $('modeSelect'); if(!sel) return
+  const order = ['1v1','2v2','3v3']
+  const i = Math.max(0, order.indexOf(sel.value))
+  sel.value = order[(i - 1 + order.length) % order.length]
+  sel.dispatchEvent(new Event('change'))
+})
+
+// open/close + pick from custom menu
+$('modeSelectBtn')?.addEventListener('click', ()=>{
+  const isOpen = $('modeSelectWrap')?.getAttribute('data-open') === 'true'
+  toggleModeMenu(!isOpen)
+})
+
+$('modeMenu')?.addEventListener('click', e=>{
+  const li = e.target.closest('.select-option'); if(!li) return
+  const sel = $('modeSelect'); if(!sel) return
+  sel.value = li.dataset.value
+  sel.dispatchEvent(new Event('change'))
+  toggleModeMenu(false)
+})
+
+// close on outside click or Esc
+document.addEventListener('click', e=>{
+  const wrap = $('modeSelectWrap')
+  if (wrap && !wrap.contains(e.target)) toggleModeMenu(false)
+})
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape') toggleModeMenu(false)
+})
+
+// initialize current label/selection once main menu binds
+syncModeUI($('modeSelect')?.value || '1v1')
+
 
 
   $('btnQueueCancel').addEventListener('click',()=>{
@@ -220,7 +282,14 @@ function nudgeTank(dir){
   state.tankIndex = (state.tankIndex + dir + 10) % 10
 }
 
-function showQueue(){ $('queueScreen').hidden = false; $('queueCountNum').textContent = '1' }
+function showQueue(){
+  $('queueScreen').hidden = false
+  $('queueCountNum').textContent = '1'
+  const mode = state.mode || $('modeSelect')?.value || '1v1'
+  const out = $('queueModeValue')
+  if(out) out.textContent = mode
+}
+
 function hideQueue(){ $('queueScreen').hidden = true }
 
 function ensureSocket(){

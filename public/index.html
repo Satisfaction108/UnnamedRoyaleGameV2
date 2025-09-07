@@ -25,14 +25,36 @@
             <div id="brandMini">UR</div>
             <div id="queueControls">
                 <div id="modeStack">
-                    <select id="modeSelect" aria-label="Gamemode">
-                        <option value="1v1" selected>1v1</option>
-                        <option value="2v2">2v2</option>
-                        <option value="3v3">3v3</option>
-                    </select>
-                    <button id="modeCycle" class="mode-arrow" title="Change mode" aria-label="Change mode"></button>
+                    <!-- custom-styled dropdown with a visually-hidden native select for a11y -->
+                    <div id="modeSelectWrap" class="select-wrap">
+                        <select id="modeSelect" class="visually-hidden" aria-label="Gamemode">
+                            <option value="1v1" selected>1v1</option>
+                            <option value="2v2">2v2</option>
+                            <option value="3v3">3v3</option>
+                        </select>
+
+                        <button id="modeSelectBtn" class="select-display" type="button" aria-haspopup="listbox" aria-expanded="false">
+                            <span id="modeSelectLabel">1v1</span>
+                            <svg id="modeSelectCaret" viewBox="0 0 12 8" width="14" height="14" aria-hidden="true">
+                                <path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                            </svg>
+                        </button>
+
+                        <ul id="modeMenu" class="select-menu" role="listbox" tabindex="-1" aria-activedescendant="modeOpt-1v1">
+                            <li id="modeOpt-1v1" class="select-option" role="option" data-value="1v1" aria-selected="true">1v1</li>
+                            <li id="modeOpt-2v2" class="select-option" role="option" data-value="2v2" aria-selected="false">2v2</li>
+                            <li id="modeOpt-3v3" class="select-option" role="option" data-value="3v3" aria-selected="false">3v3</li>
+                        </ul>
+                    </div>
+
+                    <div id="modeArrows">
+                        <button id="modeCyclePrev" class="mode-arrow" title="Previous mode" aria-label="Previous mode"></button>
+                        <button id="modeCycle" class="mode-arrow" title="Next mode" aria-label="Next mode"></button>
+                    </div>
+
                 </div>
                 <button id="btnBattle" class="btnBattle">Play</button>
+
             </div>
 
 
@@ -141,14 +163,15 @@
 
     <div id="notifyStack" aria-live="polite"></div>
 
-    <!-- Queue Screen -->
     <section id="queueScreen" hidden>
         <div id="queueInner">
             <h2 id="queueTitle">Matchmaking</h2>
             <p id="queueInfo"><span id="queueCountNum">0</span> in queue</p>
+            <p id="queueMode">BATTLE MODE: <span id="queueModeValue">1v1</span></p>
             <button id="btnQueueCancel" class="btnGhost">Cancel</button>
         </div>
     </section>
+
 
     <!-- Game View -->
     <section id="gameView" hidden>
