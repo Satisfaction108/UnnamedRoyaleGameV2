@@ -57,10 +57,17 @@ const RECOIL_DIST_MIN = 4               // minimum world-units travel
   let isSpectator = false
   const specKeys = { up: false, left: false, down: false, right: false }
 
-  let announceText = null
-  let announceUntil = 0
-  let exitCountdownSecs = 0
-  let exitCountdownStart = 0
+let announceText = null
+let announceUntil = 0
+let exitCountdownSecs = 0
+let exitCountdownStart = 0
+
+// ⏳ WoT-style prebattle countdown + roster
+let battleStartAt = 0          // server ms
+let countdownActive = false
+let rosterSlide = 0            // 0 = shown, 1 = fully pulled up
+let rosterCache = []           // from matchStart.roster
+
 
   let mouseCssX = 0, mouseCssY = 0
   let lastAimSent = 0
@@ -96,6 +103,11 @@ window.__myTeam = myTeam
 tanks.clear()
 if (Array.isArray(m.tanks)) m.tanks.forEach(({ id, tank }) => tanks.set(id, tank))
 
+// ⏳ countdown & roster
+battleStartAt = (typeof m.battleStartAt === 'number') ? m.battleStartAt : 0
+countdownActive = battleStartAt > 0
+rosterSlide = 0
+rosterCache = Array.isArray(m.roster) ? m.roster.slice() : []
 
 // reset damage flash memory
 hurtUntil.clear()
@@ -103,6 +115,7 @@ lastHealthSeen.clear()
 
 // reset recoil
 recoil.clear()
+
 
 
 
@@ -447,7 +460,21 @@ zoom += (targetZoom - zoom) * ZOOM_SMOOTH
 
 
   const renderServerTime = Date.now() - serverOffset - INTERP_DELAY_MS
-  const players = getInterpolated(renderServerTime)
+const players = getInterpolated(renderServerTime)
+
+// ⏱ server-time countdown (no INTERP delay)
+if (countdownActive && battleStartAt) {
+  const nowServer = Date.now() - serverOffset
+  if (nowServer >= battleStartAt) {
+    countdownActive = false
+    announceText = 'Battle!'
+    announceUntil = performance.now() + 1200
+  }
+} else if (rosterSlide < 1) {
+  // pull the roster up and away after start
+  rosterSlide = Math.min(1, rosterSlide + dt * 1.6)
+}
+
 
   const me = players.find(p => p.id === myId)
 
@@ -486,9 +513,11 @@ zoom += (targetZoom - zoom) * ZOOM_SMOOTH
   drawPlayers(players)
   const bullets = getInterpolatedBullets(renderServerTime)
   drawBullets(bullets)
-  drawAnnouncements()
-  drawExitCountdown()
-  if (me && !me.alive) drawDeathOverlay()
+drawAnnouncements()
+drawExitCountdown()
+if (countdownActive || rosterSlide < 1) drawCountdownAndRoster()
+if (me && !me.alive) drawDeathOverlay()
+
 
   anim = requestAnimationFrame(loop)
 }
@@ -835,6 +864,127 @@ function updateRecoil(dt) {
   function worldToScreenY(wy) { return Math.floor((wy - camera.y) * zoom + viewH / 2) }
   function lerpAngle(a, b, t) { const two = Math.PI * 2; let diff = ((b - a + Math.PI) % two) - Math.PI; return a + diff * t }
   function angleDelta(a, b) { const two = Math.PI * 2; let d = ((a - b + Math.PI) % two) - Math.PI; return d }
+  function drawCountdownAndRoster() {
+  // ----- COUNTDOWN -----
+  if (countdownActive && battleStartAt) {
+    const nowServer = Date.now() - serverOffset
+    const msLeft = Math.max(0, battleStartAt - nowServer)
+    const secs = Math.ceil(msLeft / 1000)
+    const within = (msLeft / 1000) % 1
+    const scale = 1.0 + 0.35 * (1 - within)  // pulse down each second
+
+    ctx.save()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    // subtle veil
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'
+    ctx.fillRect(0, 0, viewW, viewH)
+
+    // header
+    ctx.font = '600 22px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'
+    ctx.fillText('Battle starts in', viewW / 2, viewH * 0.32)
+
+    // big pulsing number
+    ctx.translate(viewW / 2, viewH * 0.42)
+    ctx.scale(scale, scale)
+    ctx.lineWidth = 10
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+    ctx.fillStyle = '#eaf2ff'
+    ctx.font = 'bold 120px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+    ctx.strokeText(String(secs), 0, 0)
+    ctx.fillText(String(secs), 0, 0)
+    ctx.restore()
+  }
+
+  // ----- ROSTER (pull-up animation) -----
+  const baseY = Math.round(viewH * 0.64)
+  const y = Math.round(baseY - rosterSlide * (baseY + 120))  // slide upward offscreen
+  const cardW = Math.min(720, Math.floor(viewW * 0.72))
+  const cardH = Math.min(320, Math.max(120, 60 + (rosterCache.length * 36)))
+  const x = Math.round((viewW - cardW) / 2)
+
+  // background card
+  ctx.save()
+  ctx.globalAlpha = 1 - 0.9 * rosterSlide
+  ctx.fillStyle = 'rgba(12,18,33,0.92)'
+  ctx.fillRect(x, y, cardW, cardH)
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'
+  ctx.lineWidth = 2
+  ctx.strokeRect(x + 0.5, y + 0.5, cardW - 1, cardH - 1)
+
+  // split allies vs enemies
+  const teamById = window.__teamById || new Map()
+  const myTeam = (window.__myTeam ?? teamById.get(myId) ?? 0)
+  const left = rosterCache.filter(r => (r.team ?? 0) === myTeam)
+  const right = rosterCache.filter(r => (r.team ?? 0) !== myTeam)
+
+  drawRosterColumn(x + 16, y + 18, Math.floor((cardW - 32) / 2), cardH - 36, left, true)
+  drawRosterColumn(x + Math.floor(cardW / 2) + 16, y + 18, Math.floor((cardW - 32) / 2) - 16, cardH - 36, right, false)
+
+  // VS label
+  ctx.font = '700 18px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('VS', x + cardW / 2, y + cardH / 2)
+
+  ctx.restore()
+}
+
+function drawRosterColumn(cx, cy, cw, ch, list, allies) {
+  const rowH = 32
+  ctx.save()
+  ctx.font = '600 14px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  const title = allies ? 'Allies' : 'Enemies'
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'
+  ctx.fillText(title, cx, cy - 4)
+  const startY = cy + 18
+  for (let i = 0; i < list.length; i++) {
+    const r = list[i]
+    const t = tanks.get(r.id)
+    const ny = startY + i * rowH
+    // icon
+    const icX = cx
+    const icY = ny + 10
+    drawTankIcon(icX, icY, t, allies)
+    // name
+    ctx.fillStyle = allies ? '#c7ffe8' : '#e7efff'
+    ctx.fillText(r.name || `P-${String(r.id).slice(0,4)}`, icX + 40, icY)
+    // tank name (dim)
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'
+    ctx.fillText(String(t?.name || 'Unknown'), icX + 200, icY)
+  }
+  ctx.restore()
+}
+
+function drawTankIcon(x, y, t, allies) {
+  const sides = t?.shape ?? 0
+  const size = Math.max(10, Math.min(16, (t?.size || 16) * 0.7)) * zoom
+  const sx = Math.round(x)
+  const sy = Math.round(y)
+  ctx.save()
+  ctx.lineWidth = 3
+  ctx.fillStyle = allies ? '#34d399' : '#60a5fa'
+  ctx.strokeStyle = allies ? 'rgba(0,50,30,0.7)' : 'rgba(15,30,60,0.7)'
+  if (sides === 0) {
+    ctx.beginPath(); ctx.arc(sx, sy, size, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+  } else {
+    const verts = []
+    for (let i = 0; i < sides; i++) {
+      const a = (i * 2 * Math.PI) / sides
+      verts.push({ x: sx + Math.cos(a) * size, y: sy + Math.sin(a) * size })
+    }
+    ctx.beginPath(); ctx.moveTo(verts[0].x, verts[0].y)
+    for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+  }
+  ctx.restore()
+}
+
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
   function onExitClick() {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'leaveGame' }))

@@ -16,6 +16,11 @@ this.playerTeam = new Map(players.map(p => [p.id, (typeof p.team === 'number') ?
 this.teamsEnabled = new Set([...this.playerTeam.values()].filter(t => t !== null)).size >= 2
 this.collideAllies = false   // set to true if you WANT ally-to-ally body collisions
 
+// ⏳ pre-battle countdown
+this.startDelayMs = 10_000
+this.battleStartAt = Date.now() + this.startDelayMs
+this.started = false
+
 
     const spawn = [
       { x: this.bounds.w * 0.25, y: this.bounds.h * 0.5 },
@@ -92,15 +97,17 @@ const tanksForPlayers = players.map(p => {
 
     players.forEach((p) => {
       const st = this.state.get(p.id)
-      safeSend(p.ws, {
-        type: 'matchStart',
-        gameId: this.id,
-        you: p.id,
-        w: this.bounds.w,
-        h: this.bounds.h,
-        roster,
-        tanks: tanksForPlayers,
-      })
+safeSend(p.ws, {
+  type: 'matchStart',
+  gameId: this.id,
+  you: p.id,
+  w: this.bounds.w,
+  h: this.bounds.h,
+  roster,
+  tanks: tanksForPlayers,
+  battleStartAt: this.battleStartAt,   // ← server time (ms)
+})
+
 
       const onMessage = (msg) => {
         try {
@@ -119,11 +126,13 @@ const tanksForPlayers = players.map(p => {
             if (!st?.alive) return
             if (typeof d.angle === 'number' && Number.isFinite(d.angle)) st.rot = normalizeAngle(d.angle)
           }
-          if (d.type === 'shoot') {
-            const st = this.state.get(p.id)
-            if (!st?.alive) return
-            this._shootFromTank(p.id, st)
-          }
+if (d.type === 'shoot') {
+  if (Date.now() < this.battleStartAt) return // locked pre-battle
+  const st = this.state.get(p.id)
+  if (!st?.alive) return
+  this._shootFromTank(p.id, st)
+}
+
           if (d.type === 'leaveGame') this.end('left')
         } catch {}
       }
@@ -186,48 +195,64 @@ _spawnBullet(ownerId, x, y, angle, spec, width) {
     }
   }
 
-  tick() {
-    const dt = 1 / 30
+tick() {
+  const dt = 1 / 30
+  const prebattle = Date.now() < this.battleStartAt
 
-    for (const p of this.players) {
-      const st = this.state.get(p.id)
-      if (!st?.alive) continue
-      for (let i = 0; i < st.reloadTimers.length; i++) {
-        if (st.reloadTimers[i] > 0) st.reloadTimers[i] = Math.max(0, st.reloadTimers[i] - dt)
-      }
+  // when the lock lifts, announce once
+  if (!prebattle && !this.started) {
+    this.started = true
+    this.broadcast({ type: 'announcement', text: 'Battle!' })
+  }
+
+  // reload timers always tick
+  for (const p of this.players) {
+    const st = this.state.get(p.id)
+    if (!st?.alive) continue
+    for (let i = 0; i < st.reloadTimers.length; i++) {
+      if (st.reloadTimers[i] > 0) st.reloadTimers[i] = Math.max(0, st.reloadTimers[i] - dt)
     }
+  }
 
-for (const p of this.players) {
-  const inp = this.inputs.get(p.id)
-  const st = this.state.get(p.id)
-  if (!inp || !st || !st.alive) continue
-  let dx = (inp.d ? 1 : 0) - (inp.a ? 1 : 0)
-  let dy = (inp.s ? 1 : 0) - (inp.w ? 1 : 0)
-  const len = Math.hypot(dx, dy)
-  if (len > 0) { dx /= len; dy /= len }
+  // movement + knockback only after countdown; during countdown keep clamped
+  if (!prebattle) {
+    for (const p of this.players) {
+      const inp = this.inputs.get(p.id)
+      const st = this.state.get(p.id)
+      if (!inp || !st || !st.alive) continue
+      let dx = (inp.d ? 1 : 0) - (inp.a ? 1 : 0)
+      let dy = (inp.s ? 1 : 0) - (inp.w ? 1 : 0)
+      const len = Math.hypot(dx, dy)
+      if (len > 0) { dx /= len; dy /= len }
 
-  // base movement
-const ms = (typeof st.movementSpeed === 'number') ? st.movementSpeed : this.speed
-st.x += dx * ms * dt
-st.y += dy * ms * dt
+      const ms = (typeof st.movementSpeed === 'number') ? st.movementSpeed : this.speed
+      st.x += dx * ms * dt
+      st.y += dy * ms * dt
 
+      // knockback velocity then decay
+      st.x += (st.knockVx || 0) * dt
+      st.y += (st.knockVy || 0) * dt
+      const DAMP = 4.0
+      st.knockVx = (st.knockVx || 0) * Math.max(0, 1 - DAMP * dt)
+      st.knockVy = (st.knockVy || 0) * Math.max(0, 1 - DAMP * dt)
 
-  // ➕ apply knockback velocity then decay
-  st.x += (st.knockVx || 0) * dt
-  st.y += (st.knockVy || 0) * dt
+      const r = getBoundingRadius(st)
+      st.x = clamp(st.x, r, this.bounds.w - r)
+      st.y = clamp(st.y, r, this.bounds.h - r)
+    }
+  } else {
+    // keep everyone in-bounds while waiting
+    for (const p of this.players) {
+      const st = this.state.get(p.id); if (!st) continue
+      const r = getBoundingRadius(st)
+      st.x = clamp(st.x, r, this.bounds.w - r)
+      st.y = clamp(st.y, r, this.bounds.h - r)
+    }
+  }
 
-  // viscous damping (tune as you like)
-  const DAMP = 4.0
-  st.knockVx = (st.knockVx || 0) * Math.max(0, 1 - DAMP * dt)
-  st.knockVy = (st.knockVy || 0) * Math.max(0, 1 - DAMP * dt)
-
-  // keep inside arena
-  const r = getBoundingRadius(st)
-  st.x = clamp(st.x, r, this.bounds.w - r)
-  st.y = clamp(st.y, r, this.bounds.h - r)
-}
-
-
+  // bullets & collisions only run after countdown
+  if (!prebattle) {
+    // bullet integration + lifetime cull
     for (const b of this.bullets) {
       b.x += b.vx * dt
       b.y += b.vy * dt
@@ -240,6 +265,7 @@ st.y += dy * ms * dt
       b.health > 0
     )
 
+    // bullet vs bullet
     for (let i = 0; i < this.bullets.length; i++) {
       const A = this.bullets[i]
       if (!A) continue
@@ -250,14 +276,11 @@ st.y += dy * ms * dt
         const sumR = A.r + B.r
         if (dx * dx + dy * dy <= sumR * sumR) {
           if (A.health === B.health) {
-            A.health = 0
-            B.health = 0
+            A.health = 0; B.health = 0
           } else if (A.health > B.health) {
-            A.health = A.health - B.health
-            B.health = 0
+            A.health = A.health - B.health; B.health = 0
           } else {
-            B.health = B.health - A.health
-            A.health = 0
+            B.health = B.health - A.health; A.health = 0
           }
           if (A.health <= 0) { this.bullets[i] = null }
           if (B.health <= 0) { this.bullets[j] = null }
@@ -266,75 +289,74 @@ st.y += dy * ms * dt
     }
     this.bullets = this.bullets.filter(Boolean)
 
-const now = Date.now()
-for (const b of this.bullets) {
-  for (const p of this.players) {
-    const st = this.state.get(p.id)
-    if (!st?.alive) continue
-    if (p.id === b.ownerId && now - b.bornAt < 120) continue
-    const r = getBoundingRadius(st)
-    const dx = st.x - b.x, dy = st.y - b.y
-    const minD = r + b.r
-    if (dx*dx + dy*dy <= minD*minD) {
-      const tTarget = this.playerTeam.get(p.id)
-      const tOwner = this.playerTeam.get(b.ownerId)
-      const sameTeam = this.teamsEnabled && tTarget !== null && tOwner !== null && tTarget === tOwner
-      if (sameTeam) continue
-      st.health = Math.max(0, st.health - b.damage)
-      const speed = Math.hypot(b.vx || 0, b.vy || 0) || 1
-      const ux = (b.vx || 0) / speed
-      const uy = (b.vy || 0) / speed
-      const KNOCK_PER_SIZE = 10
-      const bulletSize = b.size ?? b.r ?? 3
-      const impulse = KNOCK_PER_SIZE * bulletSize
-      st.knockVx = (st.knockVx || 0) + ux * impulse
-      st.knockVy = (st.knockVy || 0) + uy * impulse
-      b.health = 0
-    }
-  }
-}
-this.bullets = this.bullets.filter(b => b.health > 0)
-
-
-
-   for (let i = 0; i < this.players.length; i++) {
-  for (let j = i + 1; j < this.players.length; j++) {
-    const aId = this.players[i].id
-    const bId = this.players[j].id
-    const A = this.state.get(aId)
-    const B = this.state.get(bId)
-    if (!A?.alive || !B?.alive) continue
-
-    // team check up front
-    const teamA = this.playerTeam.get(aId)
-    const teamB = this.playerTeam.get(bId)
-    const sameTeam = this.teamsEnabled && teamA !== null && teamB !== null && teamA === teamB
-    if (sameTeam && this.collideAllies === false) continue  // 👈 ghost teammates: no push, no damage
-
-    const shapeA = buildShape(A)
-    const shapeB = buildShape(B)
-    const mtv = computeMTV(shapeA, shapeB)
-    if (mtv.overlap) {
-      const pushX = (mtv.axis.x * mtv.depth) / 2
-      const pushY = (mtv.axis.y * mtv.depth) / 2
-      A.x -= pushX; A.y -= pushY
-      B.x += pushX; B.y += pushY
-      const rA = getBoundingRadius(A)
-      const rB = getBoundingRadius(B)
-      A.x = clamp(A.x, rA, this.bounds.w - rA)
-      A.y = clamp(A.y, rA, this.bounds.h - rA)
-      B.x = clamp(B.x, rB, this.bounds.w - rB)
-      B.y = clamp(B.y, rB, this.bounds.h - rB)
-
-      // still block ram damage for allies when collisions are enabled
-      if (!sameTeam) {
-        A.health -= B.bodyDamage * dt
-        B.health -= A.bodyDamage * dt
+    // bullet vs player
+    const now = Date.now()
+    for (const b of this.bullets) {
+      for (const p of this.players) {
+        const st = this.state.get(p.id)
+        if (!st?.alive) continue
+        if (p.id === b.ownerId && now - b.bornAt < 120) continue
+        const r = getBoundingRadius(st)
+        const dx = st.x - b.x, dy = st.y - b.y
+        const minD = r + b.r
+        if (dx*dx + dy*dy <= minD*minD) {
+          const tTarget = this.playerTeam.get(p.id)
+          const tOwner = this.playerTeam.get(b.ownerId)
+          const sameTeam = this.teamsEnabled && tTarget !== null && tOwner !== null && tTarget === tOwner
+          if (sameTeam) continue
+          st.health = Math.max(0, st.health - b.damage)
+          const speed = Math.hypot(b.vx || 0, b.vy || 0) || 1
+          const ux = (b.vx || 0) / speed
+          const uy = (b.vy || 0) / speed
+          const KNOCK_PER_SIZE = 10
+          const bulletSize = b.size ?? b.r ?? 3
+          const impulse = KNOCK_PER_SIZE * bulletSize
+          st.knockVx = (st.knockVx || 0) + ux * impulse
+          st.knockVy = (st.knockVy || 0) + uy * impulse
+          b.health = 0
+        }
       }
     }
-  }
+    this.bullets = this.bullets.filter(b => b.health > 0)
 
+    // player vs player (SAT), ghost allies if collideAllies === false
+    for (let i = 0; i < this.players.length; i++) {
+      for (let j = i + 1; j < this.players.length; j++) {
+        const aId = this.players[i].id
+        const bId = this.players[j].id
+        const A = this.state.get(aId)
+        const B = this.state.get(bId)
+        if (!A?.alive || !B?.alive) continue
 
+        const teamA = this.playerTeam.get(aId)
+        const teamB = this.playerTeam.get(bId)
+        const sameTeam = this.teamsEnabled && teamA !== null && teamB !== null && teamA === teamB
+        if (sameTeam && this.collideAllies === false) continue
+
+        const shapeA = buildShape(A)
+        const shapeB = buildShape(B)
+        const mtv = computeMTV(shapeA, shapeB)
+        if (mtv.overlap) {
+          const pushX = (mtv.axis.x * mtv.depth) / 2
+          const pushY = (mtv.axis.y * mtv.depth) / 2
+          A.x -= pushX; A.y -= pushY
+          B.x += pushX; B.y += pushY
+          const rA = getBoundingRadius(A)
+          const rB = getBoundingRadius(B)
+          A.x = clamp(A.x, rA, this.bounds.w - rA)
+          A.y = clamp(A.y, rA, this.bounds.h - rA)
+          B.x = clamp(B.x, rB, this.bounds.w - rB)
+          B.y = clamp(B.y, rB, this.bounds.h - rB)
+
+          if (!sameTeam) {
+            A.health -= B.bodyDamage * dt
+            B.health -= A.bodyDamage * dt
+          }
+        }
+      }
+    }
+
+    // deaths + endgame only after start
     for (const p of this.players) {
       const st = this.state.get(p.id)
       if (!st) continue
@@ -344,77 +366,75 @@ this.bullets = this.bullets.filter(b => b.health > 0)
       }
     }
 
-if (!this.finishing) {
-  const alive = this.players.filter(p => this.state.get(p.id)?.alive)
-  const aliveTeams = new Set(alive.map(p => (typeof p.team === 'number') ? p.team : 0))
-  if (alive.length === 0 || aliveTeams.size === 0) {
-    this.finishing = true
-    this.broadcast({ type: 'announcement', text: `Draw!` })
-    this.broadcast({ type: 'exitCountdown', seconds: 5 })
-    setTimeout(() => this.end('draw'), 5000)
-  } else if (aliveTeams.size === 1) {
-    this.finishing = true
-    const winningTeam = [...aliveTeams][0]
-    this.broadcast({ type: 'announcement', text: `Team ${winningTeam + 1} wins!` })
-    this.broadcast({ type: 'exitCountdown', seconds: 5 })
-    setTimeout(() => this.end('victory', { team: winningTeam }), 5000)
-  }
-}
-
-
-const nowTs = Date.now()
-for (const viewer of this.players) {
-  const vst = this.state.get(viewer.id)
-  if (!vst) continue
-
-  // spectators (dead) get full state so they can freely spectate
-  const spectating = !vst.alive
-
-  // build view rectangle (square) centered on viewer
-  const HALF = Math.max(64, (vst.cameraSize ?? 500))
-  const PAD = 150 // small pad to reduce pop-in at edges
-  const L = (vst.x - HALF) - PAD
-  const T = (vst.y - HALF) - PAD
-  const R = (vst.x + HALF) + PAD
-  const B = (vst.y + HALF) + PAD
-
-  const playersOut = []
-  for (const p of this.players) {
-    const st = this.state.get(p.id)
-    if (!st) continue
-    if (!spectating) {
-      const r = getBoundingRadius(st)
-      if (!rectCircleIntersect(L, T, R, B, st.x, st.y, r)) continue
+    if (!this.finishing) {
+      const alive = this.players.filter(p => this.state.get(p.id)?.alive)
+      const aliveTeams = new Set(alive.map(p => (typeof p.team === 'number') ? p.team : 0))
+      if (alive.length === 0 || aliveTeams.size === 0) {
+        this.finishing = true
+        this.broadcast({ type: 'announcement', text: `Draw!` })
+        this.broadcast({ type: 'exitCountdown', seconds: 5 })
+        setTimeout(() => this.end('draw'), 5000)
+      } else if (aliveTeams.size === 1) {
+        this.finishing = true
+        const winningTeam = [...aliveTeams][0]
+        this.broadcast({ type: 'announcement', text: `Team ${winningTeam + 1} wins!` })
+        this.broadcast({ type: 'exitCountdown', seconds: 5 })
+        setTimeout(() => this.end('victory', { team: winningTeam }), 5000)
+      }
     }
-playersOut.push({
-  id: p.id,
-  x: st.x, y: st.y,
-  rot: st.rot,
-  size: st.size,
-  health: st.health, maxHealth: st.maxHealth,
-  alive: st.alive,
-  shape: st.shape,
-  team: (typeof p.team === 'number') ? p.team : 0,
-})
-
   }
 
-  const bulletsOut = []
-  for (const b of this.bullets) {
-    if (spectating || rectCircleIntersect(L, T, R, B, b.x, b.y, b.r)) {
-      bulletsOut.push({
-        id: b.id, ownerId: b.ownerId, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
-        r: b.r, size: b.size, sides: b.sides, strokeWidth: b.strokeWidth
+  // per-viewer state with FOV culling (always sent so countdown UI can render)
+  const nowTs = Date.now()
+  for (const viewer of this.players) {
+    const vst = this.state.get(viewer.id)
+    if (!vst) continue
+    const spectating = !vst.alive
+    const HALF = Math.max(64, (vst.cameraSize ?? 500))
+    const PAD = 150
+    const L = (vst.x - HALF) - PAD
+    const T = (vst.y - HALF) - PAD
+    const R = (vst.x + HALF) + PAD
+    const B = (vst.y + HALF) + PAD
+
+    const playersOut = []
+    for (const p of this.players) {
+      const st = this.state.get(p.id)
+      if (!st) continue
+      if (!spectating) {
+        const r = getBoundingRadius(st)
+        if (!rectCircleIntersect(L, T, R, B, st.x, st.y, r)) continue
+      }
+      playersOut.push({
+        id: p.id,
+        x: st.x, y: st.y,
+        rot: st.rot,
+        size: st.size,
+        health: st.health, maxHealth: st.maxHealth,
+        alive: st.alive,
+        shape: st.shape,
+        team: (typeof p.team === 'number') ? p.team : 0,
       })
     }
-  }
 
-safeSend(viewer.ws, { type: 'state', ts: nowTs, players: playersOut, bullets: bulletsOut })
+    const bulletsOut = []
+    for (const b of this.bullets) {
+      if (spectating || rectCircleIntersect(L, T, R, B, b.x, b.y, b.r)) {
+        bulletsOut.push({
+          id: b.id, ownerId: b.ownerId, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
+          r: b.r, size: b.size, sides: b.sides, strokeWidth: b.strokeWidth
+        })
+      }
+    }
+
+    safeSend(viewer.ws, { type: 'state', ts: nowTs, players: playersOut, bullets: bulletsOut })
+  }
 }
+
 
 // (removed stray this.broadcast(payload))
 
-  }}
+  
 
   broadcast(obj) {
     for (const p of this.players) safeSend(p.ws, obj)
