@@ -18,10 +18,12 @@ export default class Game {
       { x: this.bounds.w * 0.75, y: this.bounds.h * 0.5 },
     ]
 
-    const roster = players.map(p => ({
-      id: p.id,
-      name: p.name || `P-${String(p.id).slice(0, 4)}`,
-    }))
+const roster = players.map(p => ({
+  id: p.id,
+  name: p.name || `P-${String(p.id).slice(0, 4)}`,
+  team: (typeof p.team === 'number') ? p.team : 0,
+}))
+
 
     const tankKeys = Object.keys(TANK_DEFS)
     function normBarrel(b) {
@@ -327,22 +329,23 @@ this.bullets = this.bullets.filter(b => b.health > 0)
       }
     }
 
-    if (!this.finishing) {
-      const alive = this.players.filter(p => this.state.get(p.id)?.alive)
-      if (alive.length === 1) {
-        this.finishing = true
-        const winner = alive[0]
-        const winnerName = this.players.find(pp => pp.id === winner.id)?.name || `P-${String(winner.id).slice(0, 4)}`
-        this.broadcast({ type: 'announcement', text: `[${winnerName}] has won the battle!` })
-        this.broadcast({ type: 'exitCountdown', seconds: 5 })
-        setTimeout(() => this.end('victory', { winnerId: winner.id }), 5000)
-      } else if (alive.length === 0) {
-        this.finishing = true
-        this.broadcast({ type: 'announcement', text: `Draw!` })
-        this.broadcast({ type: 'exitCountdown', seconds: 5 })
-        setTimeout(() => this.end('draw'), 5000)
-      }
-    }
+if (!this.finishing) {
+  const alive = this.players.filter(p => this.state.get(p.id)?.alive)
+  const aliveTeams = new Set(alive.map(p => (typeof p.team === 'number') ? p.team : 0))
+  if (alive.length === 0 || aliveTeams.size === 0) {
+    this.finishing = true
+    this.broadcast({ type: 'announcement', text: `Draw!` })
+    this.broadcast({ type: 'exitCountdown', seconds: 5 })
+    setTimeout(() => this.end('draw'), 5000)
+  } else if (aliveTeams.size === 1) {
+    this.finishing = true
+    const winningTeam = [...aliveTeams][0]
+    this.broadcast({ type: 'announcement', text: `Team ${winningTeam + 1} wins!` })
+    this.broadcast({ type: 'exitCountdown', seconds: 5 })
+    setTimeout(() => this.end('victory', { team: winningTeam }), 5000)
+  }
+}
+
 
 const nowTs = Date.now()
 for (const viewer of this.players) {
@@ -368,15 +371,17 @@ for (const viewer of this.players) {
       const r = getBoundingRadius(st)
       if (!rectCircleIntersect(L, T, R, B, st.x, st.y, r)) continue
     }
-    playersOut.push({
-      id: p.id,
-      x: st.x, y: st.y,
-      rot: st.rot,
-      size: st.size,
-      health: st.health, maxHealth: st.maxHealth,
-      alive: st.alive,
-      shape: st.shape,
-    })
+playersOut.push({
+  id: p.id,
+  x: st.x, y: st.y,
+  rot: st.rot,
+  size: st.size,
+  health: st.health, maxHealth: st.maxHealth,
+  alive: st.alive,
+  shape: st.shape,
+  team: (typeof p.team === 'number') ? p.team : 0,
+})
+
   }
 
   const bulletsOut = []

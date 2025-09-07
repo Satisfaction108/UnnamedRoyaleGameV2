@@ -686,3 +686,217 @@ h2#loginTitle, h2#signupTitle {
     border: 1px solid rgba(255,255,255,.16);
     z-index: 5;
 }
+#topBar {
+    position: absolute;
+    top: calc(1.8 * var(--u));
+    left: 0;
+    right: 0;
+    height: calc(6.4 * var(--u));
+    display: grid;
+    grid-template-columns: auto 1fr auto; /* brand | controls | user */
+    align-items: center;
+    padding: 0 calc(2.2 * var(--u))
+}
+#queueControls {
+    justify-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: calc(1 * var(--u));
+}
+
+#modeSelect {
+    height: calc(4 * var(--u));
+    padding: 0 calc(1.4 * var(--u));
+    border-radius: calc(1.2 * var(--u));
+    background: linear-gradient(135deg, #1f2636, #121826);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.14);
+    box-shadow: var(--shadow);
+    font-weight: 700;
+    letter-spacing: .2px;
+    outline: none;
+    appearance: none;
+}
+
+    #modeSelect:focus {
+        border-color: #6aa8ff;
+        box-shadow: 0 0 0 calc(.6 * var(--u)) rgba(85,140,255,0.15);
+    }
+#topBar {
+    position: absolute;
+    top: calc(1.8 * var(--u));
+    left: 0;
+    right: 0;
+    height: calc(6.4 * var(--u));
+    display: grid;
+    grid-template-columns: auto 1fr auto; /* brand | controls | user */
+    align-items: center;
+    padding: 0 calc(2.2 * var(--u))
+}
+
+/* center stack for select + arrow */
+#queueControls {
+    position: relative;
+    justify-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: calc(1 * var(--u));
+}
+
+/* pretty select */
+#modeSelect {
+    height: calc(4.2 * var(--u));
+    padding: 0 calc(3.4 * var(--u)) 0 calc(1.6 * var(--u)); /* space for caret */
+    border-radius: calc(1.4 * var(--u));
+    background: linear-gradient(135deg, #1a2233, #0f1524);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 0 6px 18px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,0.06);
+    font-weight: 700;
+    letter-spacing: .2px;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    cursor: pointer;
+    min-width: calc(10 * var(--u));
+}
+
+    #modeSelect:focus {
+        border-color: #6aa8ff;
+        box-shadow: 0 0 0 calc(.6 * var(--u)) rgba(85,140,255,0.18), 0 6px 18px rgba(0,0,0,.35);
+    }
+
+    /* fake caret on the select (right side) */
+    #modeSelect::after {
+        display: none
+    }
+/* guard: pseudo not supported on select */
+#queueControls::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+    right: calc(8.5 * var(--u));
+    top: 50%;
+    transform: translateY(-50%);
+    border-left: calc(.6 * var(--u)) solid transparent;
+    border-right: calc(.6 * var(--u)) solid transparent;
+    border-top: calc(.8 * var(--u)) solid rgba(255,255,255,.75);
+    filter: drop-shadow(0 1px 0 rgba(0,0,0,.5));
+}
+
+/* round gradient Play button (kept if you already have .btnBattle) */
+.btnBattle {
+    height: calc(4.2 * var(--u));
+    padding: 0 calc(2.2 * var(--u));
+    border-radius: calc(2.6 * var(--u));
+    background: linear-gradient(135deg, #2bd3ff, #6772ff);
+    color: #0b1020;
+    font-weight: 800;
+    border: none;
+    box-shadow: 0 6px 18px rgba(0,0,0,.35), inset 0 -2px 0 rgba(255,255,255,.35);
+    cursor: pointer;
+}
+
+/* the arrow button below the select that cycles modes */
+#modeCycle.mode-arrow {
+    position: absolute;
+    top: calc(100% + .8 * var(--u));
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    width: calc(3.6 * var(--u));
+    height: calc(3.6 * var(--u));
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: radial-gradient(120% 120% at 50% 10%, #1e2637 0%, #111729 60%, #0b1020 100%);
+    box-shadow: 0 8px 26px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.05);
+    cursor: pointer;
+}
+
+    /* draw the chevron */
+    #modeCycle.mode-arrow::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: calc(1.2 * var(--u));
+        height: calc(1.2 * var(--u));
+        border-right: 3px solid rgba(255,255,255,.85);
+        border-bottom: 3px solid rgba(255,255,255,.85);
+        transform: translate(-50%,-65%) rotate(45deg);
+    }
+
+    #modeCycle.mode-arrow:active {
+        transform: translateY(1px);
+    }
+/* queue controls: two columns -> [mode stack] [Play] */
+#queueControls {
+    justify-self: center;
+    display: grid;
+    grid-auto-flow: column;
+    align-items: center;
+    column-gap: calc(1.2 * var(--u));
+}
+
+/* vertical stack: select on top, arrow below (centered) */
+#modeStack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    row-gap: calc(0.9 * var(--u));
+}
+
+/* remove fake caret entirely (it caused overlap) */
+#modeSelect::after {
+    display: none !important;
+}
+
+#queueControls::after {
+    content: none !important;
+}
+
+/* arrow is now in normal flow, centered under select */
+#modeCycle.mode-arrow {
+    position: static;
+    width: calc(3.6 * var(--u));
+    height: calc(3.6 * var(--u));
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: radial-gradient(120% 120% at 50% 10%, #1e2637 0%, #111729 60%, #0b1020 100%);
+    box-shadow: 0 8px 26px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.05);
+    cursor: pointer;
+}
+
+    #modeCycle.mode-arrow::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: calc(1.2 * var(--u));
+        height: calc(1.2 * var(--u));
+        border-right: 3px solid rgba(255,255,255,.85);
+        border-bottom: 3px solid rgba(255,255,255,.85);
+        transform: translate(-50%,-65%) rotate(45deg);
+    }
+
+    #modeCycle.mode-arrow:active {
+        transform: translateY(1px);
+    }
+/* arrow stays in flow but becomes the positioning context for ::before */
+#modeCycle.mode-arrow {
+    position: relative; /* <-- key fix */
+    top: auto;
+    left: auto;
+    right: auto;
+    margin: 0; /* cancel old absolute props */
+    width: calc(3.6 * var(--u));
+    height: calc(3.6 * var(--u));
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: radial-gradient(120% 120% at 50% 10%, #1e2637 0%, #111729 60%, #0b1020 100%);
+    box-shadow: 0 8px 26px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.05);
+    cursor: pointer;
+}

@@ -170,15 +170,35 @@ function bindMainMenu(){
   $('prevTank').addEventListener('click',()=>{ nudgeTank(-1); stall($('prevTank')) })
   $('nextTank').addEventListener('click',()=>{ nudgeTank(1); stall($('nextTank')) })
 
-  $('btnBattle').addEventListener('click',()=>{
-    if(!state.user){ notify('Log in first'); return }
-    ensureSocket()
-    showQueue()
-    state.inQueue = true
-    sendWS({ type:'joinQueue' })
-    $('btnBattle').disabled = true
-    setTimeout(()=>{ $('btnBattle').disabled=false },600)
-  })
+$('btnBattle').addEventListener('click',()=>{
+  if(!state.user){ notify('Log in first'); return }
+  ensureSocket()
+
+  const mode = $('modeSelect')?.value || '1v1'
+  showQueue()
+  state.inQueue = true
+  state.mode = mode
+  sendWS({ type:'joinQueue', mode })
+  $('btnBattle').disabled = true
+  setTimeout(()=>{ $('btnBattle').disabled=false },600)
+})
+
+// keep state.mode synced when user changes dropdown
+$('modeSelect')?.addEventListener('change', e=>{
+  state.mode = e.target.value
+})
+
+// cycle modes on arrow click: 1v1 → 2v2 → 3v3 → 1v1
+$('modeCycle')?.addEventListener('click', ()=>{
+  const sel = $('modeSelect')
+  if(!sel) return
+  const order = ['1v1','2v2','3v3']
+  const i = Math.max(0, order.indexOf(sel.value))
+  const next = order[(i+1)%order.length]
+  sel.value = next
+  sel.dispatchEvent(new Event('change'))
+})
+
 
   $('btnQueueCancel').addEventListener('click',()=>{
     sendWS({ type:'leaveQueue' })
@@ -226,7 +246,12 @@ ws.onmessage = ev => {
 
   if (window.GameClient && window.GameClient.handle(m)) return
   if (m.type === 'hello') return
-  if (m.type === 'queueCount') $('queueCountNum').textContent = String(m.n)
+if (m.type === 'queueCount') {
+  const mode = state.mode || '1v1'
+  const n = (m.counts && m.counts[mode] != null) ? m.counts[mode] : m.n
+  $('queueCountNum').textContent = String(n)
+}
+
 }
 
 }

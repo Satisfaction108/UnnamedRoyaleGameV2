@@ -76,13 +76,26 @@ const FIRE_INTERVAL_MS = 60  // client throttle; server still enforces reloads
 
   function start(m) {
   ws = window.__wsRef
-  myId = m.you
-  world = { w: m.w || 2000, h: m.h || 2000 }
+myId = m.you
+world = { w: m.w || 2000, h: m.h || 2000 }
 
 names.clear()
-if (Array.isArray(m.roster)) m.roster.forEach((r) => names.set(r.id, r.name || `P-${String(r.id).slice(0, 4)}`))
+const teamById = (window.__teamById = new Map())
+let myTeam = 0
+if (Array.isArray(m.roster)) {
+  m.roster.forEach((r) => {
+    names.set(r.id, r.name || `P-${String(r.id).slice(0, 4)}`)
+    if (typeof r.team === 'number') {
+      teamById.set(r.id, r.team)
+      if (r.id === myId) myTeam = r.team
+    }
+  })
+}
+window.__myTeam = myTeam
+
 tanks.clear()
 if (Array.isArray(m.tanks)) m.tanks.forEach(({ id, tank }) => tanks.set(id, tank))
+
 
 // reset damage flash memory
 hurtUntil.clear()
@@ -165,7 +178,12 @@ function handle(msg) {
       serverOffset += (estimate - serverOffset) * OFFSET_SMOOTH
     }
 const map = new Map()
+const teamById = window.__teamById || new Map()
 for (const p of msg.players || []) {
+  // carry team info from server, or fall back to roster mapping
+  const team = (typeof p.team === 'number') ? p.team : teamById.get(p.id)
+  if (typeof team === 'number') teamById.set(p.id, team)
+
   map.set(p.id, {
     x: p.x, y: p.y,
     rot: p.rot ?? 0,
@@ -173,7 +191,10 @@ for (const p of msg.players || []) {
     health: p.health, maxHealth: p.maxHealth,
     alive: p.alive !== false,
     shape: p.shape ?? (tanks.get(p.id)?.shape || 0),
+    team,
   })
+
+
 
   // 👇 damage detection: if health dropped vs last snapshot, start a flash
   const prev = lastHealthSeen.get(p.id)
@@ -524,7 +545,7 @@ zoom += (targetZoom - zoom) * ZOOM_SMOOTH
     ctx.restore()
   }
 
-  function drawPlayers(ps) {
+function drawPlayers(ps) {
   const now = performance.now()
   ctx.textAlign = 'center'
   ctx.textBaseline = 'bottom'
@@ -535,7 +556,13 @@ zoom += (targetZoom - zoom) * ZOOM_SMOOTH
     const y = worldToScreenY(p.y)
     const rWorld = Math.max(8, p.size || tank?.size || 16)
     const r = rWorld * zoom
-    const fill = !p.alive ? '#4b5563' : (p.id === myId ? '#34d399' : '#60a5fa')
+
+    const teamById = window.__teamById || new Map()
+    const myTeam = (window.__myTeam ?? teamById.get(myId) ?? 0)
+    let theirTeam = (typeof p.team === 'number') ? p.team : teamById.get(p.id)
+    if (typeof theirTeam !== 'number') theirTeam = -1
+
+    const fill = !p.alive ? '#4b5563' : (theirTeam === myTeam ? '#34d399' : '#60a5fa')
     const stroke = darker(fill, 0.6)
 
 if (tank?.barrels?.length) {
@@ -623,7 +650,7 @@ if (msLeft > 0) {
     ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1)
     const label = names.get(p.id) || `P-${String(p.id).slice(0, 4)}`
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.strokeText(label, x, barY - 4)
-    ctx.fillStyle = p.id === myId ? '#e6fff4' : '#f3f7ff'; ctx.fillText(label, x, barY - 4)
+    ctx.fillStyle = (theirTeam === myTeam) ? '#e6fff4' : '#f3f7ff'; ctx.fillText(label, x, barY - 4)
   }
 }
 

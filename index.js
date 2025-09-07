@@ -109,20 +109,35 @@ const server = app.listen(PORT, () => console.log(`HTTP listening on http://loca
 
 // Attach directly to the HTTP server on /ws (simpler & more robust)
 const wss = new WebSocketServer({ server, path: '/ws' })
-const queue = []
+const queues = { '1v1': [], '2v2': [], '3v3': [] }
 const inGame = new Map()
+const MODE_PLAYERS = { '1v1': 2, '2v2': 4, '3v3': 6 }
 
 function send(ws, obj) { try { ws.send(JSON.stringify(obj)) } catch {} }
+function countsByMode() {
+  return {
+    '1v1': queues['1v1'].length,
+    '2v2': queues['2v2'].length,
+    '3v3': queues['3v3'].length,
+  }
+}
 function broadcastQueue(reason = '') {
-  const n = queue.length
-  if (reason) console.log(`[QUEUE] size=${n} :: ${reason}`)
-  else console.log(`[QUEUE] size=${n}`)
-  wss.clients.forEach(c => { if (c.readyState === 1) send(c, { type:'queueCount', n }) })
+  const counts = countsByMode()
+  const total = counts['1v1'] + counts['2v2'] + counts['3v3']
+  if (reason) console.log(`[QUEUE] totals=${JSON.stringify(counts)} :: ${reason}`)
+  else console.log(`[QUEUE] totals=${JSON.stringify(counts)}`)
+  // keep 'n' for backward-compat, but also send {counts}
+  wss.clients.forEach(c => {
+    if (c.readyState === 1) send(c, { type:'queueCount', n: total, counts })
+  })
 }
-function removeFromQueue(ws) {
-  const i = queue.indexOf(ws)
-  if (i !== -1) queue.splice(i, 1)
+function removeFromAllQueues(ws) {
+  for (const k of Object.keys(queues)) {
+    const i = queues[k].indexOf(ws)
+    if (i !== -1) queues[k].splice(i, 1)
+  }
 }
+
 
 wss.on('connection', (ws, req) => {
   ws._id = randomUUID()
@@ -138,42 +153,53 @@ wss.on('connection', (ws, req) => {
     if (!msg) return
 
     if (msg.type === 'joinQueue') {
-      if (inGame.has(ws)) return
-      if (!queue.includes(ws)) {
-        ws._status = 'queue'
-        queue.push(ws)
-        console.log(`[QUEUE] + ${ws._user} joined (id=${ws._id})`)
-        send(ws, { type:'queued' })
-        broadcastQueue(`join by ${ws._user}`)
-      }
-      if (queue.length >= 2) {
-        const a = queue.shift()
-        const b = queue.shift()
-        a._status = 'ingame'
-        b._status = 'ingame'
-        const players = [
-          { id: randomUUID(), ws: a, name: a._user },
-          { id: randomUUID(), ws: b, name: b._user }
-        ]
-        const game = new Game(players)
-        players.forEach(p => inGame.set(p.ws, game))
-        console.log(`[MATCH] starting game ${game.id} :: A=${a._user} vs B=${b._user}`)
-        broadcastQueue('match formed')
-        game.onEnd = (reason) => {
-          players.forEach(p => inGame.delete(p.ws))
-          try { a._status = 'idle' } catch {}
-          try { b._status = 'idle' } catch {}
-          console.log(`[MATCH] game ${game.id} ended :: reason=${reason}`)
-        }
-      }
-    }
+  if (inGame.has(ws)) return
+  const mode = (msg && typeof msg.mode === 'string' && ['1v1','2v2','3v3'].includes(msg.mode)) ? msg.mode : '1v1'
 
-    if (msg.type === 'leaveQueue') {
-      removeFromQueue(ws)
-      ws._status = 'idle'
-      console.log(`[QUEUE] - ${ws._user} left (id=${ws._id})`)
-      broadcastQueue(`leave by ${ws._user}`)
+  // ensure the user isn't in any other queue
+  removeFromAllQueues(ws)
+
+  // put into selected queue
+  ws._status = 'queue'
+  queues[mode].push(ws)
+  console.log(`[QUEUE] + ${ws._user} joined (${mode}) id=${ws._id}`)
+  send(ws, { type:'queued', mode })
+  broadcastQueue(`join by ${ws._user} (${mode})`)
+
+  const need = MODE_PLAYERS[mode]
+  while (queues[mode].length >= need) {
+    const party = queues[mode].splice(0, need)
+    for (const s of party) s._status = 'ingame'
+
+    // assign teams: first half = team 0, second half = team 1
+    const half = need / 2
+    const players = party.map((sock, i) => ({
+      id: randomUUID(),
+      ws: sock,
+      name: sock._user,
+      team: (i < half) ? 0 : 1
+    }))
+
+    const game = new Game(players)
+    players.forEach(p => inGame.set(p.ws, game))
+    console.log(`[MATCH] starting ${mode} game ${game.id} :: players=${party.map(s=>s._user).join(',')}`)
+    broadcastQueue('match formed')
+
+    game.onEnd = (reason) => {
+      players.forEach(p => inGame.delete(p.ws))
+      for (const s of party) { try { s._status = 'idle' } catch {} }
+      console.log(`[MATCH] game ${game.id} ended :: reason=${reason}`)
     }
+  }
+}
+
+
+if (msg.type === 'leaveQueue') {
+  removeFromAllQueues(ws)
+  ws._status = 'idle'
+  console.log(`[QUEUE] - ${ws._user} left (id=${ws._id})`)
+  broadcastQueue(`leave by ${ws._user}`)
+}
 
     if (msg.type === 'leaveGame') {
       const game = inGame.get(ws)
@@ -184,11 +210,12 @@ wss.on('connection', (ws, req) => {
     }
   })
 
-  ws.on('close', () => {
-    console.log(`[WS] disconnect id=${ws._id} user=${ws._user}`)
-    removeFromQueue(ws)
-    broadcastQueue(`disconnect ${ws._user}`)
-    const game = inGame.get(ws)
-    if (game) game.end('dc')
-  })
+ws.on('close', () => {
+  console.log(`[WS] disconnect id=${ws._id} user=${ws._user}`)
+  removeFromAllQueues(ws)
+  broadcastQueue(`disconnect ${ws._user}`)
+  const game = inGame.get(ws)
+  if (game) game.end('dc')
+})
+
 })
