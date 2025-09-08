@@ -260,74 +260,88 @@ _spawnBullet(ownerId, x, y, angle, spec, width) {
     }
   }
 
-  // bullets & collisions only run after countdown
-  if (!prebattle) {
-    // bullet integration + lifetime cull
-    for (const b of this.bullets) {
-      b.x += b.vx * dt
-      b.y += b.vy * dt
-      b.life += dt
-    }
-    this.bullets = this.bullets.filter(b =>
-      b.life < b.maxLife &&
-      b.x >= -50 && b.x <= this.bounds.w + 50 &&
-      b.y >= -50 && b.y <= this.bounds.h + 50 &&
-      b.health > 0
-    )
+// bullets & collisions only run after countdown
+if (!prebattle) {
+  // bullet integration + lifetime cull
+  for (const b of this.bullets) {
+    b.x += b.vx * dt
+    b.y += b.vy * dt
+    b.life += dt
+  }
+  this.bullets = this.bullets.filter(b =>
+    b.life < b.maxLife &&
+    b.x >= -50 && b.x <= this.bounds.w + 50 &&
+    b.y >= -50 && b.y <= this.bounds.h + 50 &&
+    b.health > 0
+  )
 
-    // bullet vs bullet
-    for (let i = 0; i < this.bullets.length; i++) {
-      const A = this.bullets[i]
-      if (!A) continue
-      for (let j = i + 1; j < this.bullets.length; j++) {
-        const B = this.bullets[j]
-        if (!B) continue
-        const dx = B.x - A.x, dy = B.y - A.y
-        const sumR = A.r + B.r
-        if (dx * dx + dy * dy <= sumR * sumR) {
-          if (A.health === B.health) {
-            A.health = 0; B.health = 0
-          } else if (A.health > B.health) {
-            A.health = A.health - B.health; B.health = 0
-          } else {
-            B.health = B.health - A.health; A.health = 0
-          }
-          if (A.health <= 0) { this.bullets[i] = null }
-          if (B.health <= 0) { this.bullets[j] = null }
-        }
+  // 🚫 NEW: bullet vs walls — kill bullets on wall contact
+  for (const b of this.bullets) {
+    for (const w of this.walls) {
+      if (rectCircleIntersect(
+            w.x, w.y, w.x + w.width, w.y + w.height,
+            b.x, b.y, b.r)) {
+        b.health = 0
+        break
       }
     }
-    this.bullets = this.bullets.filter(Boolean)
+  }
+  this.bullets = this.bullets.filter(b => b.health > 0)
 
-    // bullet vs player (unchanged)
-    const now = Date.now()
-    for (const b of this.bullets) {
-      for (const p of this.players) {
-        const st = this.state.get(p.id)
-        if (!st?.alive) continue
-        if (p.id === b.ownerId && now - b.bornAt < 120) continue
-        const r = getBoundingRadius(st)
-        const dx = st.x - b.x, dy = st.y - b.y
-        const minD = r + b.r
-        if (dx*dx + dy*dy <= minD*minD) {
-          const tTarget = this.playerTeam.get(p.id)
-          const tOwner = this.playerTeam.get(b.ownerId)
-          const sameTeam = this.teamsEnabled && tTarget !== null && tOwner !== null && tTarget === tOwner
-          if (sameTeam) continue
-          st.health = Math.max(0, st.health - b.damage)
-          const speed = Math.hypot(b.vx || 0, b.vy || 0) || 1
-          const ux = (b.vx || 0) / speed
-          const uy = (b.vy || 0) / speed
-          const KNOCK_PER_SIZE = 10
-          const bulletSize = b.size ?? b.r ?? 3
-          const impulse = KNOCK_PER_SIZE * bulletSize
-          st.knockVx = (st.knockVx || 0) + ux * impulse
-          st.knockVy = (st.knockVy || 0) + uy * impulse
-          b.health = 0
+  // bullet vs bullet (unchanged)
+  for (let i = 0; i < this.bullets.length; i++) {
+    const A = this.bullets[i]
+    if (!A) continue
+    for (let j = i + 1; j < this.bullets.length; j++) {
+      const B = this.bullets[j]
+      if (!B) continue
+      const dx = B.x - A.x, dy = B.y - A.y
+      const sumR = A.r + B.r
+      if (dx * dx + dy * dy <= sumR * sumR) {
+        if (A.health === B.health) {
+          A.health = 0; B.health = 0
+        } else if (A.health > B.health) {
+          A.health = A.health - B.health; B.health = 0
+        } else {
+          B.health = B.health - A.health; A.health = 0
         }
+        if (A.health <= 0) { this.bullets[i] = null }
+        if (B.health <= 0) { this.bullets[j] = null }
       }
     }
-    this.bullets = this.bullets.filter(b => b.health > 0)
+  }
+  this.bullets = this.bullets.filter(Boolean)
+
+  // bullet vs player (unchanged)
+  const now = Date.now()
+  for (const b of this.bullets) {
+    for (const p of this.players) {
+      const st = this.state.get(p.id)
+      if (!st?.alive) continue
+      if (p.id === b.ownerId && now - b.bornAt < 120) continue
+      const r = getBoundingRadius(st)
+      const dx = st.x - b.x, dy = st.y - b.y
+      const minD = r + b.r
+      if (dx*dx + dy*dy <= minD*minD) {
+        const tTarget = this.playerTeam.get(p.id)
+        const tOwner = this.playerTeam.get(b.ownerId)
+        const sameTeam = this.teamsEnabled && tTarget !== null && tOwner !== null && tTarget === tOwner
+        if (sameTeam) continue
+        st.health = Math.max(0, st.health - b.damage)
+        const speed = Math.hypot(b.vx || 0, b.vy || 0) || 1
+        const ux = (b.vx || 0) / speed
+        const uy = (b.vy || 0) / speed
+        const KNOCK_PER_SIZE = 10
+        const bulletSize = b.size ?? b.r ?? 3
+        const impulse = KNOCK_PER_SIZE * bulletSize
+        st.knockVx = (st.knockVx || 0) + ux * impulse
+        st.knockVy = (st.knockVy || 0) + uy * impulse
+        b.health = 0
+      }
+    }
+  }
+  this.bullets = this.bullets.filter(b => b.health > 0)
+
 
     // player vs player (SAT), ghost allies if collideAllies === false
     for (let i = 0; i < this.players.length; i++) {
@@ -539,13 +553,14 @@ function buildWallsFromGrid(ascii, bounds) {
           width: cellW,
           height: cellH,
           color: '#334155',      // slate-700-ish
-          strokeWidth: 2,
+          strokeWidth: 4,
         })
       }
     }
   }
   return walls
 }
+
 
 // circle vs AABB — returns minimal translation vector {mtvx, mtvy} or null
 function resolveCircleVsAabb(cx, cy, r, rx, ry, rw, rh) {

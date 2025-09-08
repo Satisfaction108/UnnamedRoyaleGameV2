@@ -559,60 +559,60 @@ if (me && !me.alive) drawDeathOverlay()
     }
   }
 
-    function drawWorld() {
-    ctx.fillStyle = '#05080f'
-    ctx.fillRect(0, 0, viewW, viewH)
-    const left = worldToScreenX(0)
-    const top = worldToScreenY(0)
-    const right = worldToScreenX(world.w)
-    const bottom = worldToScreenY(world.h)
-    const w = right - left
-    const h = bottom - top
-    ctx.fillStyle = '#0b1220'
-    ctx.fillRect(left, top, w, h)
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'
-    ctx.lineWidth = 2
-    ctx.strokeRect(Math.floor(left)+1.5, Math.floor(top)+1.5, Math.floor(w)-3, Math.floor(h)-3)
-    ctx.save()
-    ctx.beginPath()
-    ctx.rect(left, top, w, h)
-    ctx.clip()
+function drawWorld() {
+  ctx.fillStyle = '#05080f'
+  ctx.fillRect(0, 0, viewW, viewH)
+  const left = worldToScreenX(0)
+  const top = worldToScreenY(0)
+  const right = worldToScreenX(world.w)
+  const bottom = worldToScreenY(world.h)
+  const w = right - left
+  const h = bottom - top
+  ctx.fillStyle = '#0b1220'
+  ctx.fillRect(left, top, w, h)
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+  ctx.lineWidth = 2
+  ctx.strokeRect(Math.floor(left)+1.5, Math.floor(top)+1.5, Math.floor(w)-3, Math.floor(h)-3)
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(left, top, w, h)
+  ctx.clip()
 
-    // grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)'
-    ctx.lineWidth = 1
-    const grid = 100
-    ctx.beginPath()
-    for (let x = 0; x <= world.w; x += grid) {
-      const sx = worldToScreenX(x) + 0.5
-      ctx.moveTo(sx, top)
-      ctx.lineTo(sx, bottom)
-    }
-    for (let y = 0; y <= world.h; y += grid) {
-      const sy = worldToScreenY(y) + 0.5
-      ctx.moveTo(left, sy)
-      ctx.lineTo(right, sy)
-    }
-    ctx.stroke()
-
-    // 🧱 walls (world units → screen)
-    for (const wall of mazeWalls) {
-      const sx = worldToScreenX(wall.x)
-      const sy = worldToScreenY(wall.y)
-      const sw = Math.floor(wall.width * zoom)
-      const sh = Math.floor(wall.height * zoom)
-      ctx.fillStyle = wall.color || '#334155'
-      ctx.fillRect(sx, sy, sw, sh)
-      const stroke = wall.strokeWidth ?? 2
-      if (stroke > 0) {
-        ctx.lineWidth = stroke
-        ctx.strokeStyle = darker(wall.color || '#334155', 0.4)
-        ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1)
-      }
-    }
-
-    ctx.restore()
+  // grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'
+  ctx.lineWidth = 1
+  const grid = 100
+  ctx.beginPath()
+  for (let x = 0; x <= world.w; x += grid) {
+    const sx = worldToScreenX(x) + 0.5
+    ctx.moveTo(sx, top)
+    ctx.lineTo(sx, bottom)
   }
+  for (let y = 0; y <= world.h; y += grid) {
+    const sy = worldToScreenY(y) + 0.5
+    ctx.moveTo(left, sy)
+    ctx.lineTo(right, sy)
+  }
+  ctx.stroke()
+
+  // 🧱 walls (world units → screen)
+  for (const wall of mazeWalls) {
+    const sx = worldToScreenX(wall.x)
+    const sy = worldToScreenY(wall.y)
+    const sw = Math.floor(wall.width * zoom)
+    const sh = Math.floor(wall.height * zoom)
+    ctx.fillStyle = wall.color || '#334155'
+    ctx.fillRect(sx, sy, sw, sh)
+    const stroke = wall.strokeWidth ?? 4
+    if (stroke > 0) {
+      ctx.lineWidth = stroke
+      ctx.strokeStyle = darker(wall.color || '#334155', 0.4)
+      ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1)
+    }
+  }
+
+  ctx.restore()
+}
 
 
 function drawPlayers(ps) {
