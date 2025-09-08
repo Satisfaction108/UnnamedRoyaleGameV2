@@ -3,36 +3,38 @@ import TANK_DEFS from './tankdefs.js'
 import BULLET_DEFS from './bulletdefs.js'
 
 export default class Game {
-  constructor(players) {
+  constructor(players, opts = {}) {
     this.id = randomUUID()
     this.players = players
     this.bounds = { w: 1200, h: 800 }
     this.speed = 300
     this.state = new Map()
     this.inputs = new Map()
-this.closed = false
-this.finishing = false
-this.playerTeam = new Map(players.map(p => [p.id, (typeof p.team === 'number') ? p.team : null]))
-this.teamsEnabled = new Set([...this.playerTeam.values()].filter(t => t !== null)).size >= 2
-this.collideAllies = false   // set to true if you WANT ally-to-ally body collisions
+    this.closed = false
+    this.finishing = false
+    this.playerTeam = new Map(players.map(p => [p.id, (typeof p.team === 'number') ? p.team : null]))
+    this.teamsEnabled = new Set([...this.playerTeam.values()].filter(t => t !== null)).size >= 2
+    this.collideAllies = false
 
-// ⏳ pre-battle countdown
-this.startDelayMs = 10_000
-this.battleStartAt = Date.now() + this.startDelayMs
-this.started = false
+    // ⏳ pre-battle countdown
+    this.startDelayMs = 10_000
+    this.battleStartAt = Date.now() + this.startDelayMs
+    this.started = false
 
+    // 🧱 build walls from ASCII map (if provided)
+    const gridStr = typeof opts.mapGrid === 'string' ? opts.mapGrid : ''
+    this.walls = buildWallsFromGrid(gridStr, this.bounds)  // [{x,y,width,height,color,strokeWidth}]
 
     const spawn = [
       { x: this.bounds.w * 0.25, y: this.bounds.h * 0.5 },
       { x: this.bounds.w * 0.75, y: this.bounds.h * 0.5 },
     ]
 
-const roster = players.map(p => ({
-  id: p.id,
-  name: p.name || `P-${String(p.id).slice(0, 4)}`,
-  team: (typeof p.team === 'number') ? p.team : 0,
-}))
-
+    const roster = players.map(p => ({
+      id: p.id,
+      name: p.name || `P-${String(p.id).slice(0, 4)}`,
+      team: (typeof p.team === 'number') ? p.team : 0,
+    }))
 
     const tankKeys = Object.keys(TANK_DEFS)
     function normBarrel(b) {
@@ -51,63 +53,61 @@ const roster = players.map(p => ({
 
     players.forEach((p, i) => {
       const tk = tankKeys[Math.floor(Math.random() * tankKeys.length)]
-const def = TANK_DEFS[tk]
-const moveSpeed = (typeof def.movementSpeed === 'number') ? def.movementSpeed : 300
-const bodyDamage = (typeof def.bodyDamage === 'number') ? def.bodyDamage : Math.round(20 + def.size * 3)
-const cameraSize = (typeof def.cameraSize === 'number') ? def.cameraSize : 500
-const barrels = (def.barrels || []).map(normBarrel)
-this.state.set(p.id, {
-  x: spawn[i % spawn.length].x,
-  y: spawn[i % spawn.length].y,
-  rot: 0,
-  size: def.size,
-  health: def.maxHealth,
-  maxHealth: def.maxHealth,
-  bodyDamage,
-  movementSpeed: moveSpeed,
-  cameraSize,               // 👈 per-tank FOV half-size for server culling (square)
-  alive: true,
-  tankId: tk,
-  shape: def.shape,
-  barrels,
-  reloadTimers: new Array(barrels.length).fill(0),
-  knockVx: 0,
-  knockVy: 0,
-})
+      const def = TANK_DEFS[tk]
+      const moveSpeed = (typeof def.movementSpeed === 'number') ? def.movementSpeed : 300
+      const bodyDamage = (typeof def.bodyDamage === 'number') ? def.bodyDamage : Math.round(20 + def.size * 3)
+      const cameraSize = (typeof def.cameraSize === 'number') ? def.cameraSize : 500
+      const barrels = (def.barrels || []).map(normBarrel)
+      this.state.set(p.id, {
+        x: spawn[i % spawn.length].x,
+        y: spawn[i % spawn.length].y,
+        rot: 0,
+        size: def.size,
+        health: def.maxHealth,
+        maxHealth: def.maxHealth,
+        bodyDamage,
+        movementSpeed: moveSpeed,
+        cameraSize,
+        alive: true,
+        tankId: tk,
+        shape: def.shape,
+        barrels,
+        reloadTimers: new Array(barrels.length).fill(0),
+        knockVx: 0,
+        knockVy: 0,
+      })
 
-
-
-// ✅ make sure inputs exist so movement works
-this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
+      // inputs exist
+      this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
     })
-const tanksForPlayers = players.map(p => {
-  const st = this.state.get(p.id)
-  return {
-    id: p.id,
-    tank: {
-      name: st.tankId,
-      shape: st.shape,
-      size: st.size,
-      barrels: st.barrels,
-      cameraSize: st.cameraSize,   // 👈 send per-tank FOV half-size to client
-    },
-  }
-})
 
+    const tanksForPlayers = players.map(p => {
+      const st = this.state.get(p.id)
+      return {
+        id: p.id,
+        tank: {
+          name: st.tankId,
+          shape: st.shape,
+          size: st.size,
+          barrels: st.barrels,
+          cameraSize: st.cameraSize,
+        },
+      }
+    })
 
     players.forEach((p) => {
       const st = this.state.get(p.id)
-safeSend(p.ws, {
-  type: 'matchStart',
-  gameId: this.id,
-  you: p.id,
-  w: this.bounds.w,
-  h: this.bounds.h,
-  roster,
-  tanks: tanksForPlayers,
-  battleStartAt: this.battleStartAt,   // ← server time (ms)
-})
-
+      safeSend(p.ws, {
+        type: 'matchStart',
+        gameId: this.id,
+        you: p.id,
+        w: this.bounds.w,
+        h: this.bounds.h,
+        roster,
+        tanks: tanksForPlayers,
+        walls: this.walls,                 // ← NEW: send maze walls once at start
+        battleStartAt: this.battleStartAt,
+      })
 
       const onMessage = (msg) => {
         try {
@@ -126,12 +126,12 @@ safeSend(p.ws, {
             if (!st?.alive) return
             if (typeof d.angle === 'number' && Number.isFinite(d.angle)) st.rot = normalizeAngle(d.angle)
           }
-if (d.type === 'shoot') {
-  if (Date.now() < this.battleStartAt) return // locked pre-battle
-  const st = this.state.get(p.id)
-  if (!st?.alive) return
-  this._shootFromTank(p.id, st)
-}
+          if (d.type === 'shoot') {
+            if (Date.now() < this.battleStartAt) return
+            const st = this.state.get(p.id)
+            if (!st?.alive) return
+            this._shootFromTank(p.id, st)
+          }
 
           if (d.type === 'leaveGame') this.end('left')
         } catch {}
@@ -195,7 +195,7 @@ _spawnBullet(ownerId, x, y, angle, spec, width) {
     }
   }
 
-tick() {
+  tick() {
   const dt = 1 / 30
   const prebattle = Date.now() < this.battleStartAt
 
@@ -236,9 +236,19 @@ tick() {
       st.knockVx = (st.knockVx || 0) * Math.max(0, 1 - DAMP * dt)
       st.knockVy = (st.knockVy || 0) * Math.max(0, 1 - DAMP * dt)
 
+      // world clamp first
       const r = getBoundingRadius(st)
       st.x = clamp(st.x, r, this.bounds.w - r)
       st.y = clamp(st.y, r, this.bounds.h - r)
+
+      // 🧱 player vs maze walls (AABB) — push tank out by MTV
+      for (const w of this.walls) {
+        const hit = resolveCircleVsAabb(st.x, st.y, r, w.x, w.y, w.width, w.height)
+        if (hit) {
+          st.x += hit.mtvx
+          st.y += hit.mtvy
+        }
+      }
     }
   } else {
     // keep everyone in-bounds while waiting
@@ -289,7 +299,7 @@ tick() {
     }
     this.bullets = this.bullets.filter(Boolean)
 
-    // bullet vs player
+    // bullet vs player (unchanged)
     const now = Date.now()
     for (const b of this.bullets) {
       for (const p of this.players) {
@@ -505,6 +515,64 @@ function rectCircleIntersect(L, T, R, B, cx, cy, r) {
   const dx = cx - clx
   const dy = cy - cly
   return (dx * dx + dy * dy) <= r * r
+}
+function buildWallsFromGrid(ascii, bounds) {
+  const linesRaw = (ascii || '').split('\n').map(s => s.trim()).filter(Boolean)
+  if (!linesRaw.length) return []
+  // support "w _ w" or "w_w" styles
+  const tokenized = linesRaw.map(line => {
+    const parts = line.split(/\s+/).filter(Boolean)
+    return (parts.length > 1) ? parts : line.split('')
+  })
+  const rows = tokenized.length
+  const cols = tokenized[0].length
+  const cellW = bounds.w / cols
+  const cellH = bounds.h / rows
+  const walls = []
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const ch = (tokenized[r][c] || '_').toLowerCase()
+      if (ch === 'w') {
+        walls.push({
+          x: c * cellW,
+          y: r * cellH,
+          width: cellW,
+          height: cellH,
+          color: '#334155',      // slate-700-ish
+          strokeWidth: 2,
+        })
+      }
+    }
+  }
+  return walls
+}
+
+// circle vs AABB — returns minimal translation vector {mtvx, mtvy} or null
+function resolveCircleVsAabb(cx, cy, r, rx, ry, rw, rh) {
+  const nearestX = clamp(cx, rx, rx + rw)
+  const nearestY = clamp(cy, ry, ry + rh)
+  let dx = cx - nearestX
+  let dy = cy - nearestY
+  const distSq = dx*dx + dy*dy
+  if (distSq >= r*r) {
+    // inside-rect special case (center inside): push out along smallest axis
+    if (cx > rx && cx < rx + rw && cy > ry && cy < ry + rh) {
+      const left = cx - rx
+      const right = (rx + rw) - cx
+      const top = cy - ry
+      const bottom = (ry + rh) - cy
+      const m = Math.min(left, right, top, bottom)
+      if (m === left)  return { mtvx: r - left,  mtvy: 0 }
+      if (m === right) return { mtvx: -(r - right), mtvy: 0 }
+      if (m === top)   return { mtvx: 0, mtvy: r - top }
+      if (m === bottom)return { mtvx: 0, mtvy: -(r - bottom) }
+    }
+    return null
+  }
+  const dist = Math.sqrt(distSq) || 1
+  const pen = r - dist
+  dx /= dist; dy /= dist
+  return { mtvx: dx * pen, mtvy: dy * pen }
 }
 
 function safeSend(ws,obj){ try{ if(ws&&ws.readyState===1) ws.send(JSON.stringify(obj)) }catch{} }

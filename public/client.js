@@ -24,6 +24,7 @@ const FOV_MARGIN = 100   // world-unit padding so client view < server FOV (prev
 
   let myId = null
   let world = { w: 2000, h: 2000 }
+  let mazeWalls = []   // ← NEW: server-provided walls (world units)
 
   let dpr = Math.min(window.devicePixelRatio || 1, 3)
   let viewW = 0, viewH = 0
@@ -35,6 +36,7 @@ const FOV_MARGIN = 100   // world-unit padding so client view < server FOV (prev
 
 const names = new Map()
 const tanks = new Map()
+
 
 // damage flash state
 const hurtUntil = new Map()      // id -> timestamp (performance.now()) until which we flash
@@ -86,11 +88,11 @@ let autofireEnabled = false
 let fireAccumMs = 0
 const FIRE_INTERVAL_MS = 60  // client throttle; server still enforces reloads
 
-
   function start(m) {
   ws = window.__wsRef
-myId = m.you
+myId = m.id || m.you || null
 world = { w: m.w || 2000, h: m.h || 2000 }
+mazeWalls = Array.isArray(m.walls) ? m.walls : []   // ← NEW
 
 names.clear()
 const teamById = (window.__teamById = new Map())
@@ -161,6 +163,7 @@ recoil.clear()
   autofireEnabled = false
   fireAccumMs = 0
 }
+
 
 
 function stop() {
@@ -556,7 +559,7 @@ if (me && !me.alive) drawDeathOverlay()
     }
   }
 
-  function drawWorld() {
+    function drawWorld() {
     ctx.fillStyle = '#05080f'
     ctx.fillRect(0, 0, viewW, viewH)
     const left = worldToScreenX(0)
@@ -574,6 +577,8 @@ if (me && !me.alive) drawDeathOverlay()
     ctx.beginPath()
     ctx.rect(left, top, w, h)
     ctx.clip()
+
+    // grid
     ctx.strokeStyle = 'rgba(255,255,255,0.12)'
     ctx.lineWidth = 1
     const grid = 100
@@ -589,8 +594,26 @@ if (me && !me.alive) drawDeathOverlay()
       ctx.lineTo(right, sy)
     }
     ctx.stroke()
+
+    // 🧱 walls (world units → screen)
+    for (const wall of mazeWalls) {
+      const sx = worldToScreenX(wall.x)
+      const sy = worldToScreenY(wall.y)
+      const sw = Math.floor(wall.width * zoom)
+      const sh = Math.floor(wall.height * zoom)
+      ctx.fillStyle = wall.color || '#334155'
+      ctx.fillRect(sx, sy, sw, sh)
+      const stroke = wall.strokeWidth ?? 2
+      if (stroke > 0) {
+        ctx.lineWidth = stroke
+        ctx.strokeStyle = darker(wall.color || '#334155', 0.4)
+        ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1)
+      }
+    }
+
     ctx.restore()
   }
+
 
 function drawPlayers(ps) {
   const now = performance.now()

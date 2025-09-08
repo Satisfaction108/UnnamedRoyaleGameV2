@@ -1,4 +1,4 @@
-import express from 'express'
+﻿import express from 'express'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { promises as fs } from 'fs'
@@ -21,6 +21,16 @@ app.use(express.urlencoded({ extended: false }))
 
 const USERS_DIR = path.join(__dirname, 'users')
 await fs.mkdir(USERS_DIR, { recursive: true })
+
+// ── maps ────────────────────────────────────────────────────────────────────
+const MAPS_DIR = path.join(__dirname, 'maps')
+await fs.mkdir(MAPS_DIR, { recursive: true })
+
+async function loadAsciiMap(name) {
+  const p = path.join(MAPS_DIR, `${name}.txt`)
+  try { return (await fs.readFile(p, 'utf8')).trim() } catch { return '' }
+}
+
 
 function validUsername(u) { return /^[a-zA-Z0-9_]{3,20}$/.test(u) }
 function userPath(u) { return path.join(USERS_DIR, `${u}.json`) }
@@ -147,12 +157,12 @@ wss.on('connection', (ws, req) => {
   console.log(`[WS] connect id=${ws._id} user=${ws._user}`)
   send(ws, { type:'hello' })
 
-  ws.on('message', raw => {
-    let msg = null
-    try { msg = JSON.parse(raw) } catch { return }
-    if (!msg) return
+ws.on('message', async raw => {
+  let msg = null
+  try { msg = JSON.parse(raw) } catch { return }
+  if (!msg) return
 
-    if (msg.type === 'joinQueue') {
+  if (msg.type === 'joinQueue') {
   if (inGame.has(ws)) return
   const mode = (msg && typeof msg.mode === 'string' && ['1v1','2v2','3v3'].includes(msg.mode)) ? msg.mode : '1v1'
 
@@ -180,10 +190,18 @@ wss.on('connection', (ws, req) => {
       team: (i < half) ? 0 : 1
     }))
 
-    const game = new Game(players)
+    const mapGrid = await loadAsciiMap('default_1')   // ← NEW: choose default map
+    const game = new Game(players, { mapGrid })
     players.forEach(p => inGame.set(p.ws, game))
     console.log(`[MATCH] starting ${mode} game ${game.id} :: players=${party.map(s=>s._user).join(',')}`)
     broadcastQueue('match formed')
+
+    game.onEnd = (reason) => {
+      players.forEach(p => inGame.delete(p.ws))
+      for (const s of party) { try { s._status = 'idle' } catch {} }
+      console.log(`[MATCH] game ${game.id} ended :: reason=${reason}`)
+    }
+
 
     game.onEnd = (reason) => {
       players.forEach(p => inGame.delete(p.ws))
@@ -201,14 +219,15 @@ if (msg.type === 'leaveQueue') {
   broadcastQueue(`leave by ${ws._user}`)
 }
 
-    if (msg.type === 'leaveGame') {
-      const game = inGame.get(ws)
-      if (game) {
-        console.log(`[GAME] ${ws._user} requested leave in game ${game.id}`)
-        game.end('left')
-      }
+  if (msg.type === 'leaveGame') {
+    const game = inGame.get(ws)
+    if (game) {
+      console.log(`[GAME] ${ws._user} requested leave in game ${game.id}`)
+      game.end('left')
     }
-  })
+  }
+})
+
 
 ws.on('close', () => {
   console.log(`[WS] disconnect id=${ws._id} user=${ws._user}`)
