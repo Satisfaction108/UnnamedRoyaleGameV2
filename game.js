@@ -77,9 +77,20 @@ export default class Game {
         knockVy: 0,
       })
 
+      // 🧱 If we spawned inside a wall, push out immediately by the minimal translation vector.
+      {
+        const st = this.state.get(p.id)
+        const r = getBoundingRadius(st)
+        for (const w of this.walls) {
+          const hit = resolveCircleVsAabb(st.x, st.y, r, w.x, w.y, w.width, w.height)
+          if (hit) { st.x += hit.mtvx; st.y += hit.mtvy }
+        }
+      }
+
       // inputs exist
       this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
     })
+
 
     const tanksForPlayers = players.map(p => {
       const st = this.state.get(p.id)

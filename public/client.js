@@ -50,6 +50,10 @@ const RECOIL_RECOVER_PER_S = 7.0        // how fast it returns to 0
 const RECOIL_DIST_SCALE = 0.35          // travel fraction of barrel length
 const RECOIL_DIST_MIN = 4               // minimum world-units travel
 
+// 💥 bullet death FX (grow + fade)
+const bulletFades = []   // {x,y,size,sides,start,duration}
+
+
 
 
   const camera = { x: 0, y: 0 }
@@ -203,64 +207,77 @@ function handle(msg) {
       const estimate = Date.now() - msg.ts
       serverOffset += (estimate - serverOffset) * OFFSET_SMOOTH
     }
-const map = new Map()
-const teamById = window.__teamById || new Map()
-for (const p of msg.players || []) {
-  // carry team info from server, or fall back to roster mapping
-  const team = (typeof p.team === 'number') ? p.team : teamById.get(p.id)
-  if (typeof team === 'number') teamById.set(p.id, team)
+    const map = new Map()
+    const teamById = window.__teamById || new Map()
+    for (const p of msg.players || []) {
+      // carry team info from server, or fall back to roster mapping
+      const team = (typeof p.team === 'number') ? p.team : teamById.get(p.id)
+      if (typeof team === 'number') teamById.set(p.id, team)
 
-  map.set(p.id, {
-    x: p.x, y: p.y,
-    rot: p.rot ?? 0,
-    size: p.size,
-    health: p.health, maxHealth: p.maxHealth,
-    alive: p.alive !== false,
-    shape: p.shape ?? (tanks.get(p.id)?.shape || 0),
-    team,
-  })
+      map.set(p.id, {
+        x: p.x, y: p.y,
+        rot: p.rot ?? 0,
+        size: p.size,
+        health: p.health, maxHealth: p.maxHealth,
+        alive: p.alive !== false,
+        shape: p.shape ?? (tanks.get(p.id)?.shape || 0),
+        team,
+      })
 
-
-
-  // 👇 damage detection: if health dropped vs last snapshot, start a flash
-  const prev = lastHealthSeen.get(p.id)
-  if (typeof prev === 'number' && p.health < prev) {
-    hurtUntil.set(p.id, performance.now() + 200) // ~200ms flash
-  }
-  lastHealthSeen.set(p.id, p.health)
-}
-
-// store bullets as a Map keyed by id for interpolation
-const bulletsMap = new Map()
-for (const b of (msg.bullets || [])) bulletsMap.set(b.id, b)
-
-// 🔁 recoil: kick when a NEW bullet appears (compare with prev snapshot)
-const prevBullets = snapshots.length ? snapshots[snapshots.length - 1].bullets : undefined
-if (msg.bullets && msg.bullets.length) {
-  for (const b of msg.bullets) {
-    const isNew = !prevBullets || !prevBullets.has(b.id)
-    if (isNew && b.ownerId) {
-      const ang = Math.atan2(b.vy || 0, b.vx || 0)
-      kickRecoil(b.ownerId, ang, map)
+      // 👇 damage detection: if health dropped vs last snapshot, start a flash
+      const prev = lastHealthSeen.get(p.id)
+      if (typeof prev === 'number' && p.health < prev) {
+        hurtUntil.set(p.id, performance.now() + 200) // ~200ms flash
+      }
+      lastHealthSeen.set(p.id, p.health)
     }
-  }
-}
 
-snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsMap })
+    // store bullets as a Map keyed by id for interpolation
+    const bulletsMap = new Map()
+    for (const b of (msg.bullets || [])) bulletsMap.set(b.id, b)
 
+    // 🔁 recoil: kick when a NEW bullet appears (compare with prev snapshot)
+    const prevBullets = snapshots.length ? snapshots[snapshots.length - 1].bullets : undefined
+    if (msg.bullets && msg.bullets.length) {
+      for (const b of msg.bullets) {
+        const isNew = !prevBullets || !prevBullets.has(b.id)
+        if (isNew && b.ownerId) {
+          const ang = Math.atan2(b.vy || 0, b.vx || 0)
+          kickRecoil(b.ownerId, ang, map)
+        }
+      }
+    }
+
+    // 💀 detect bullet deaths (present before, missing now) → spawn fade FX
+    // Delay start by INTERP_DELAY_MS to align with render-time disappearance.
+    if (prevBullets) {
+      for (const [id, b] of prevBullets.entries()) {
+        if (!bulletsMap.has(id)) {
+          bulletFades.push({
+            x: b.x, y: b.y,
+            size: b.size ?? b.r ?? 3,
+            sides: b.sides ?? 0,
+            start: performance.now() + INTERP_DELAY_MS,
+            duration: 220, // ms
+          })
+        }
+      }
+    }
+
+    snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsMap })
 
     if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
 
     const me = map.get(myId)
     const newSpectator = me ? !me.alive : true
-if (newSpectator !== isSpectator) {
-  isSpectator = newSpectator
-  if (!isSpectator) {
-    // keep current zoom; next frame we auto-fit to cameraSize FOV
-    targetZoom = zoom
-    specKeys.up = specKeys.left = specKeys.down = specKeys.right = false
-  }
-}
+    if (newSpectator !== isSpectator) {
+      isSpectator = newSpectator
+      if (!isSpectator) {
+        // keep current zoom; next frame we auto-fit to cameraSize FOV
+        targetZoom = zoom
+        specKeys.up = specKeys.left = specKeys.down = false; specKeys.right = false
+      }
+    }
 
     return true
   }
@@ -425,6 +442,7 @@ function getInterpolatedBullets(renderServerTime) {
     const b0 = B0.get(id)
     const b1 = B1.get(id)
     if (b0 && b1) {
+      // normal interpolate between snapshots
       out.push({
         id,
         x: b0.x + (b1.x - b0.x) * t,
@@ -434,19 +452,21 @@ function getInterpolatedBullets(renderServerTime) {
         sides: b1.sides ?? b0.sides,
         strokeWidth: b1.strokeWidth ?? b0.strokeWidth,
       })
-    } else {
-      const b = b1 || b0
-      const baseTs = b1 ? t1 : t0
-      const dt = (renderServerTime - baseTs) / 1000
+    } else if (!b0 && b1) {
+      // newly spawned: backtrack a bit for smoothness
+      const dt = (renderServerTime - t1) / 1000 // negative
       out.push({
-        id: b.id,
-        x: b.x + (b.vx || 0) * dt,
-        y: b.y + (b.vy || 0) * dt,
-        r: b.r,
-        size: b.size,
-        sides: b.sides,
-        strokeWidth: b.strokeWidth,
+        id: b1.id,
+        x: b1.x + (b1.vx || 0) * dt,
+        y: b1.y + (b1.vy || 0) * dt,
+        r: b1.r,
+        size: b1.size,
+        sides: b1.sides,
+        strokeWidth: b1.strokeWidth,
       })
+    } else {
+      // was present, now gone (b0 && !b1) → DO NOT extrapolate (prevents ghosting)
+      // intentionally skip
     }
   })
   return out
@@ -534,13 +554,14 @@ if (countdownActive && battleStartAt) {
   drawPlayers(players)
   const bullets = getInterpolatedBullets(renderServerTime)
   drawBullets(bullets)
-drawAnnouncements()
-drawExitCountdown()
-if (countdownActive || rosterSlide < 1) drawCountdownAndRoster()
-if (me && !me.alive) drawDeathOverlay()
-
+  drawBulletDeaths() // 💥 NEW: render fade puffs from bullets removed this frame
+  drawAnnouncements()
+  drawExitCountdown()
+  if (countdownActive || rosterSlide < 1) drawCountdownAndRoster()
+  if (me && !me.alive) drawDeathOverlay()
 
   anim = requestAnimationFrame(loop)
+
 }
 
 
@@ -738,13 +759,11 @@ function drawBullets(bullets) {
     ctx.lineWidth = Math.max(1, (b.strokeWidth ?? 2) * (0.75 + 0.25 * zoom))
 
     if (sides === 0) {
-      // circle bullet
       ctx.beginPath()
       ctx.arc(sx, sy, rad, 0, Math.PI * 2)
       ctx.fill()
       ctx.stroke()
     } else {
-      // polygon bullet
       const verts = []
       for (let i = 0; i < sides; i++) {
         const a = (i * 2 * Math.PI) / sides
@@ -753,6 +772,49 @@ function drawBullets(bullets) {
       ctx.beginPath()
       ctx.moveTo(verts[0].x, verts[0].y)
       for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    }
+  }
+  ctx.restore()
+}
+
+// 💀 NEW: quick death puff — grows and fades out
+function drawBulletDeaths() {
+  if (!bulletFades.length) return
+  const now = performance.now()
+  ctx.save()
+  for (let i = bulletFades.length - 1; i >= 0; i--) {
+    const fx = bulletFades[i]
+    const t = Math.min(1, (now - fx.start) / fx.duration)
+    const alpha = 1 - t
+    if (alpha <= 0) { bulletFades.splice(i, 1); continue }
+
+    const sx = worldToScreenX(fx.x)
+    const sy = worldToScreenY(fx.y)
+    const base = Math.max(2, fx.size * zoom)
+    const rad = base * (1 + 0.8 * t) // grow up to ~1.8x
+
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = 'rgba(255,255,255,1)'
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)'
+    ctx.lineWidth = Math.max(1, 2 * (0.75 + 0.25 * zoom))
+
+    if ((fx.sides | 0) === 0) {
+      ctx.beginPath()
+      ctx.arc(sx, sy, rad, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    } else {
+      const verts = []
+      for (let k = 0; k < fx.sides; k++) {
+        const a = (k * 2 * Math.PI) / fx.sides
+        verts.push({ x: sx + Math.cos(a) * rad, y: sy + Math.sin(a) * rad })
+      }
+      ctx.beginPath()
+      ctx.moveTo(verts[0].x, verts[0].y)
+      for (let k = 1; k < verts.length; k++) ctx.lineTo(verts[k].x, verts[k].y)
       ctx.closePath()
       ctx.fill()
       ctx.stroke()
