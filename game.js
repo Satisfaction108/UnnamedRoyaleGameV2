@@ -2,6 +2,32 @@
 import TANK_DEFS from './tankdefs.js'
 import BULLET_DEFS from './bulletdefs.js'
 
+// ── STAT SYSTEM ──────────────────────────────────────────────────────────────
+const STAT_LABELS = [
+  'Health Regen',        // 0: no-op for now
+  'Max Health',          // 1
+  'Body Damage',         // 2
+  'Bullet Speed',        // 3
+  'Bullet Penetration',  // 4 (bullet health)
+  'Bullet Damage',       // 5
+  'Reload',              // 6 (reduces reload time)
+  'Movement Speed'       // 7
+]
+const STAT_STEPS = {
+  // multiplicative factors per point
+  maxHealth:       0.06,   // +6% / pt
+  bodyDamage:      0.06,   // +6% / pt
+  bulletSpeed:     0.05,   // +5% / pt
+  bulletHealth:    0.08,   // +8% / pt
+  bulletDamage:    0.05,   // +5% / pt
+  reload:          0.05,   // −5% time / pt
+  movementSpeed:   0.03    // +3% / pt
+}
+function mul(step, lvl){ return Math.pow(1 + step, Math.max(0, lvl|0)) }
+function timeMul(step, lvl){ return Math.pow(1 - step, Math.max(0, lvl|0)) } // smaller is faster
+// ─────────────────────────────────────────────────────────────────────────────
+
+
 export default class Game {
   constructor(players, opts = {}) {
     this.id = randomUUID()
@@ -51,45 +77,65 @@ export default class Game {
     this.bullets = []
     this._bulletSeq = 1
 
-    players.forEach((p, i) => {
-      const tk = tankKeys[Math.floor(Math.random() * tankKeys.length)]
-      const def = TANK_DEFS[tk]
-      const moveSpeed = (typeof def.movementSpeed === 'number') ? def.movementSpeed : 300
-      const bodyDamage = (typeof def.bodyDamage === 'number') ? def.bodyDamage : Math.round(20 + def.size * 3)
-      const cameraSize = (typeof def.cameraSize === 'number') ? def.cameraSize : 500
-      const barrels = (def.barrels || []).map(normBarrel)
-      this.state.set(p.id, {
-        x: spawn[i % spawn.length].x,
-        y: spawn[i % spawn.length].y,
-        rot: 0,
-        size: def.size,
-        health: def.maxHealth,
-        maxHealth: def.maxHealth,
-        bodyDamage,
-        movementSpeed: moveSpeed,
-        cameraSize,
-        alive: true,
-        tankId: tk,
-        shape: def.shape,
-        barrels,
-        reloadTimers: new Array(barrels.length).fill(0),
-        knockVx: 0,
-        knockVy: 0,
-      })
+// track stat allocations per player
+this.stats = new Map()  // id -> { points, levels[8] }
 
-      // 🧱 If we spawned inside a wall, push out immediately by the minimal translation vector.
-      {
-        const st = this.state.get(p.id)
-        const r = getBoundingRadius(st)
-        for (const w of this.walls) {
-          const hit = resolveCircleVsAabb(st.x, st.y, r, w.x, w.y, w.width, w.height)
-          if (hit) { st.x += hit.mtvx; st.y += hit.mtvy }
-        }
-      }
+players.forEach((p, i) => {
+  const tk = tankKeys[Math.floor(Math.random() * tankKeys.length)]
+  const def = TANK_DEFS[tk]
+  const moveSpeed = (typeof def.movementSpeed === 'number') ? def.movementSpeed : 300
+  const bodyDamage = (typeof def.bodyDamage === 'number') ? def.bodyDamage : Math.round(20 + def.size * 3)
+  const cameraSize = (typeof def.cameraSize === 'number') ? def.cameraSize : 500
+  const barrels = (def.barrels || []).map(normBarrel)
 
-      // inputs exist
-      this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
-    })
+  const st = {
+    x: spawn[i % spawn.length].x,
+    y: spawn[i % spawn.length].y,
+    rot: 0,
+    size: def.size,
+    // live values
+    health: def.maxHealth,
+    maxHealth: def.maxHealth,
+    bodyDamage,
+    movementSpeed: moveSpeed,
+    cameraSize,
+    alive: true,
+    tankId: tk,
+    shape: def.shape,
+    barrels,
+    reloadTimers: new Array(barrels.length).fill(0),
+    knockVx: 0,
+    knockVy: 0,
+
+    // base values (for re-computing on stat upgrades)
+    baseMaxHealth: def.maxHealth,
+    baseBodyDamage: bodyDamage,
+    baseMoveSpeed: moveSpeed,
+
+    // bullet & reload multipliers (derived from stats)
+    bulletDMGmul: 1,
+    bulletSPDmul: 1,
+    bulletHPmul: 1,
+    reloadTimeMul: 1
+  }
+  this.state.set(p.id, st)
+
+  // If we spawned inside a wall, push out (unchanged)…
+  {
+    const r = getBoundingRadius(st)
+    for (const w of this.walls) {
+      const hit = resolveCircleVsAabb(st.x, st.y, r, w.x, w.y, w.width, w.height)
+      if (hit) { st.x += hit.mtvx; st.y += hit.mtvy }
+    }
+  }
+
+  // new player starts with 33 points, no levels
+  this.stats.set(p.id, { points: 33, levels: new Array(8).fill(0) })
+  this._recomputeDerivedFromStats(p.id)   // compute first time
+
+  this.inputs.set(p.id, { w: false, a: false, s: false, d: false })
+})
+
 
 
     const tanksForPlayers = players.map(p => {
@@ -108,17 +154,24 @@ export default class Game {
 
     players.forEach((p) => {
       const st = this.state.get(p.id)
-      safeSend(p.ws, {
-        type: 'matchStart',
-        gameId: this.id,
-        you: p.id,
-        w: this.bounds.w,
-        h: this.bounds.h,
-        roster,
-        tanks: tanksForPlayers,
-        walls: this.walls,                 // ← NEW: send maze walls once at start
-        battleStartAt: this.battleStartAt,
-      })
+const mine = this.stats.get(p.id) || { points: 33, levels: new Array(8).fill(0) }
+safeSend(p.ws, {
+  type: 'matchStart',
+  gameId: this.id,
+  you: p.id,
+  w: this.bounds.w,
+  h: this.bounds.h,
+  roster,
+  tanks: tanksForPlayers,
+  walls: this.walls,
+  battleStartAt: this.battleStartAt,
+
+  // 👇 personal stat state
+  statPoints: mine.points,
+  statLevels: mine.levels,
+  statLabels: STAT_LABELS
+})
+
 
       const onMessage = (msg) => {
         try {
@@ -143,7 +196,17 @@ export default class Game {
             if (!st?.alive) return
             this._shootFromTank(p.id, st)
           }
-
+          if (d.type === 'upgrade') {
+  const idx = (d.index|0)
+  const mine = this.stats.get(p.id)
+  if (mine && idx >= 0 && idx < 8 && mine.points > 0) {
+    mine.points -= 1
+    mine.levels[idx] += 1
+    this._recomputeDerivedFromStats(p.id)
+    // tell only that player
+    safeSend(p.ws, { type: 'stats', points: mine.points, levels: mine.levels })
+  }
+}
           if (d.type === 'leaveGame') this.end('left')
         } catch {}
       }
@@ -156,10 +219,42 @@ export default class Game {
     this.loop = setInterval(() => this.tick(), 1000 / 30)
   }
 
+  // inside class Game
+_recomputeDerivedFromStats(pid){
+  const st = this.state.get(pid); if (!st) return
+  const ss = this.stats.get(pid) || { points: 0, levels: new Array(8).fill(0) }
+
+  const lvl = ss.levels
+  const mhMul = mul(STAT_STEPS.maxHealth,     lvl[1])
+  const bdMul = mul(STAT_STEPS.bodyDamage,    lvl[2])
+  const bsMul = mul(STAT_STEPS.bulletSpeed,   lvl[3])
+  const bhMul = mul(STAT_STEPS.bulletHealth,  lvl[4])
+  const dmMul = mul(STAT_STEPS.bulletDamage,  lvl[5])
+  const rlMul = timeMul(STAT_STEPS.reload,    lvl[6])
+  const msMul = mul(STAT_STEPS.movementSpeed, lvl[7])
+
+  // apply to “live” attributes (regen [0] is a no-op for now)
+  const oldMax = st.maxHealth
+  st.maxHealth    = Math.round(st.baseMaxHealth * mhMul)
+  st.health       = Math.min(st.maxHealth, st.health + (st.maxHealth - oldMax)) // give the delta
+  st.bodyDamage   = Math.round(st.baseBodyDamage * bdMul)
+  st.movementSpeed= st.baseMoveSpeed * msMul
+
+  st.bulletDMGmul = dmMul
+  st.bulletSPDmul = bsMul
+  st.bulletHPmul  = bhMul
+  st.reloadTimeMul= rlMul
+}
+
 
 _spawnBullet(ownerId, x, y, angle, spec, width) {
-  const bspec = BULLET_DEFS[spec] || BULLET_DEFS.Basic
-  const speed = bspec.speed
+const bspec = BULLET_DEFS[spec] || BULLET_DEFS.Basic
+const shooter = this.state.get(ownerId)
+const spMul = shooter?.bulletSPDmul ?? 1
+const hpMul = shooter?.bulletHPmul  ?? 1
+const dmMul = shooter?.bulletDMGmul ?? 1
+
+const speed = (bspec.speed || 800) * spMul
   const cos = Math.cos(angle), sin = Math.sin(angle)
 
   // visual size (also used for collision radius).
@@ -178,8 +273,8 @@ _spawnBullet(ownerId, x, y, angle, spec, width) {
     size,                              // 🔹 for client rendering
     sides: bspec.sides ?? 0,           // 🔹 0=circle, >=3 polygon
     strokeWidth: bspec.strokeWidth ?? 2, // 🔹 outline width in px
-    damage: bspec.damage,
-    health: bspec.health,
+  damage: (bspec.damage || 10) * dmMul,
+  health: (bspec.health || 5)  * hpMul,
     bornAt: Date.now(),
     life: 0,
     maxLife: 3.0,
@@ -201,8 +296,10 @@ _spawnBullet(ownerId, x, y, angle, spec, width) {
       const baseY = st.y + sin * fwd + cos * side
       const tipX = baseX + cos * len
       const tipY = baseY + sin * len
-      this._spawnBullet(pid, tipX, tipY, dir, b.bulletType || 'Basic', b.width || 6)
-      st.reloadTimers[i] = Math.max(0.05, b.reload || 0.30)
+this._spawnBullet(pid, tipX, tipY, dir, b.bulletType || 'Basic', b.width || 6)
+const rt = Math.max(0.05, (b.reload || 0.30) * (st.reloadTimeMul || 1))
+st.reloadTimers[i] = rt
+
     }
   }
 

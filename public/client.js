@@ -1,4 +1,5 @@
 ﻿const GameClient = (() => {
+
   const $ = (id) => document.getElementById(id)
 
   const INTERP_DELAY_MS = 120
@@ -68,6 +69,22 @@ let announceUntil = 0
 let exitCountdownSecs = 0
 let exitCountdownStart = 0
 
+const STAT_COLORS = ['#f59e0b','#ec4899','#8b5cf6','#3b82f6','#eab308','#ef4444','#22c55e','#06b6d4']
+let statLabels = ['Health Regen','Max Health','Body Damage','Bullet Speed','Bullet Penetration','Bullet Damage','Reload','Movement Speed']
+let statPoints = 33
+let statLevels = new Array(8).fill(0)
+
+// UI tween levels (smoothly animate toward statLevels)
+let statUiLevels = new Array(8).fill(0)
+
+// click animation per row
+let statAnim = new Array(8).fill(0)   // store last-activated timestamp (ms)
+
+// bar rects for mouse clicks (canvas-space px)
+let statRects = new Array(8).fill(null)
+
+
+
 // ⏳ WoT-style prebattle countdown + roster
 let battleStartAt = 0          // server ms
 let countdownActive = false
@@ -121,6 +138,16 @@ countdownActive = battleStartAt > 0
 rosterSlide = 0
 rosterCache = Array.isArray(m.roster) ? m.roster.slice() : []
 
+if (Array.isArray(m.statLevels)) statLevels = m.statLevels.slice(0,8)
+if (typeof m.statPoints === 'number') statPoints = m.statPoints|0
+if (Array.isArray(m.statLabels)) statLabels = m.statLabels.slice(0,8)
+
+// sync UI tween + reset animations
+statUiLevels = statLevels.slice(0,8)
+statAnim = new Array(8).fill(0)
+statRects = new Array(8).fill(null)
+
+
 // 🌫️ turn on the dark overlay for the countdown
 overlayAlpha = OVERLAY_ON
 
@@ -139,6 +166,8 @@ recoil.clear()
   ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
   resizeCanvas()
   window.addEventListener('resize', onResize, { passive: true })
+
+    canvas.addEventListener('mousedown', onStatBarClick, { passive: false })
 
   $('queueScreen') && ($('queueScreen').hidden = true)
   $('gameView') && ($('gameView').hidden = false)
@@ -294,6 +323,11 @@ function handle(msg) {
     return true
   }
 
+  if (msg.type === 'stats') {
+  if (typeof msg.points === 'number') statPoints = msg.points|0
+  if (Array.isArray(msg.levels)) statLevels = msg.levels.slice(0,8)
+  return true
+}
   if (msg.type === 'matchEnd') { stop(); window.__onMatchEnd && window.__onMatchEnd(msg); return true }
   return false
 }
@@ -317,12 +351,25 @@ function handle(msg) {
       }
     } else {
       // autofire toggle
-      if (k === 'e') {
-        autofireEnabled = !autofireEnabled
-        announceText = `Autofire ${autofireEnabled ? 'Enabled.' : 'Disabled.'}`
-        announceUntil = performance.now() + 1800
-        return
-      }
+// autofire toggle
+if (k === 'e') {
+  autofireEnabled = !autofireEnabled
+  announceText = `Autofire ${autofireEnabled ? 'Enabled.' : 'Disabled.'}`
+  announceUntil = performance.now() + 1800
+  return
+}
+
+if (k >= '1' && k <= '8') {
+  const idx = (k.charCodeAt(0) - '1'.charCodeAt(0)) | 0
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'upgrade', index: idx }))
+  }
+  statAnim[idx] = performance.now()    // 🔔 bump animation
+  e.preventDefault()
+  return
+}
+
+
 
       let changed = false
       if (k === 'w' || k === 'arrowup') { if (!keys.w) { keys.w = true; changed = true } }
@@ -550,15 +597,18 @@ if (countdownActive && battleStartAt) {
 
   // render
   ctx.clearRect(0, 0, viewW, viewH)
-  drawWorld()
-  drawPlayers(players)
-  const bullets = getInterpolatedBullets(renderServerTime)
-  drawBullets(bullets)
-  drawBulletDeaths() // 💥 NEW: render fade puffs from bullets removed this frame
-  drawAnnouncements()
-  drawExitCountdown()
-  if (countdownActive || rosterSlide < 1) drawCountdownAndRoster()
-  if (me && !me.alive) drawDeathOverlay()
+drawWorld()
+drawPlayers(players)
+const bullets = getInterpolatedBullets(renderServerTime)
+drawBullets(bullets)
+drawBulletDeaths()
+drawAnnouncements()
+drawExitCountdown()
+if (countdownActive || rosterSlide < 1) drawCountdownAndRoster()
+if (me && !me.alive) drawDeathOverlay()
+
+drawStatBar()  // 📊 new
+
 
   anim = requestAnimationFrame(loop)
 
@@ -1119,8 +1169,129 @@ function drawTankIcon(x, y, t, allies) {
     window.__onMatchEnd && window.__onMatchEnd()
   }
 
+
+
+function onStatBarClick(e){
+  // translate to canvas pixels
+  const r = canvas.getBoundingClientRect()
+  const sx = canvas.width  / r.width
+  const sy = canvas.height / r.height
+  const mx = (e.clientX - r.left) * sx
+  const my = (e.clientY - r.top)  * sy
+
+  for (let i = 0; i < statRects.length; i++){
+    const R = statRects[i]
+    if (!R) continue
+    if (mx >= R.x && mx <= R.x + R.w && my >= R.y && my <= R.y + R.h){
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'upgrade', index: i }))
+      }
+      statAnim[i] = performance.now()  // 🔔 bump animation
+      e.preventDefault()
+      return
+    }
+  }
+}
+
+
+function drawStatBar(){
+  const now = performance.now()
+
+  // layout: top-left corner
+  const pad = 14
+  const rowH = 36
+  const gap  = 6
+  const barW = 300   // all bars same length
+  const x = Math.floor(pad)
+  const y0 = Math.floor(pad)
+
+  // smooth UI tween toward real levels
+  for (let i = 0; i < 8; i++){
+    const target = statLevels[i] | 0
+    const cur = statUiLevels[i] || 0
+    statUiLevels[i] = cur + (target - cur) * 0.18
+  }
+
+  ctx.save()
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'left'
+
+  // title bubble with remaining points
+  ctx.font = 'bold 20px Inter, system-ui, -apple-system, Segoe UI'
+  ctx.fillStyle = '#ffffff'
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+  ctx.lineWidth = 4
+  const title = `x${statPoints|0}`
+  ctx.strokeText(title, x + barW + 22, y0 - 2)
+  ctx.fillText(title,  x + barW + 22, y0 - 2)
+
+  // rows
+  ctx.font = '16px Inter, system-ui, -apple-system, Segoe UI'
+  for (let i = 0; i < 8; i++){
+    const y = y0 + 20 + i * (rowH + gap)
+
+    // clickable rect (canvas pixels)
+    statRects[i] = { x, y, w: barW, h: rowH }
+
+    // animation state
+    const start = statAnim[i] || 0
+    const prog  = start ? Math.min(1, (now - start) / 260) : 1
+    const bump  = start ? (1 - (prog*prog)) : 0          // quick ease-out
+    const glowA = start ? (1 - prog) * 0.7 : 0
+
+    // base track (same length for all)
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'
+    ctx.fillRect(x, y, barW, rowH)
+
+    // subtle border
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(x+0.5, y+0.5, barW-1, rowH-1)
+
+    // left-aligned label
+    ctx.fillStyle = '#e5e7eb'
+    ctx.fillText(statLabels[i] || `Stat ${i+1}`, x + 12, y + rowH/2)
+
+    // level fill (tweened), does not affect total bar length
+    const lvl = statUiLevels[i]
+    const frac = Math.min(1, lvl / 10)
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'
+    ctx.fillRect(x, y, barW * frac, rowH)
+
+    // right key cap
+    const keyW = 64
+    const kx = x + barW - keyW
+    ctx.fillStyle = STAT_COLORS[i] || '#64748b'
+    ctx.fillRect(kx, y, keyW, rowH)
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'
+    ctx.fillRect(kx+0.5, y+0.5, keyW-1, rowH-1)
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#111827'
+    ctx.font = 'bold 15px Inter, system-ui, -apple-system, Segoe UI'
+    ctx.fillText(`[${i+1}] +`, kx + keyW/2, y + rowH/2)
+    ctx.textAlign = 'left'
+
+    // click bump “glow” overlay
+    if (glowA > 0){
+      ctx.save()
+      ctx.globalAlpha = glowA
+      ctx.fillStyle = STAT_COLORS[i] || '#ffffff'
+      // slightly expand vertically for a satisfying bump
+      const by = y - 2 - 2*bump
+      const bh = rowH + 4 + 4*bump
+      ctx.fillRect(x, by, barW, bh)
+      ctx.restore()
+    }
+  }
+
+  ctx.restore()
+}
+
+
   return { handle, exit: onExitClick }
 })()
+
+
 
 window.GameClient = GameClient
 console.log('[Client] GameClient ready (+bullets, click-to-shoot, barrel objects)')
