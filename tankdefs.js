@@ -11,7 +11,7 @@ const TANK_DEFS = {
     bodyDamage: 86,
     cameraSize: 1500,  // 👈 square half-size (world units) for server FOV cull
     barrels: [
-      { length: 34, width: 20, forwardOffset: 12, sidewaysOffset: 0, directionRadians: 0.0, bulletType: 'Basic', reload: 0.28 },
+      { length: 34, width: 20, forwardOffset: 12, sidewaysOffset: 0, directionRadians: 0.0, bulletType: 'Heavy', reload: 2 },
     ],
   },
 
