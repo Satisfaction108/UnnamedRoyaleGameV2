@@ -190,10 +190,21 @@ ws.on('message', async raw => {
       team: (i < half) ? 0 : 1
     }))
 
-    const mapGrid = await loadAsciiMap('default_1')   // ← NEW: choose default map
-    const game = new Game(players, { mapGrid })
-    players.forEach(p => inGame.set(p.ws, game))
-    console.log(`[MATCH] starting ${mode} game ${game.id} :: players=${party.map(s=>s._user).join(',')}`)
+const mapGrid = await loadAsciiMap('default_1')
+
+// pick a gamemode based on party size
+const poolByQueue = {
+  '1v1': ['BLITZ', 'TIME'],
+  '2v2': ['BLITZ', 'TIME'],
+  '3v3': ['LTS']
+}
+const gmPool = poolByQueue[mode] || ['BLITZ']
+const gamemode = gmPool[Math.floor(Math.random() * gmPool.length)]
+
+const game = new Game(players, { mapGrid, gamemode })
+players.forEach(p => inGame.set(p.ws, game))
+console.log(`[MATCH] starting ${mode} (${gamemode}) game ${game.id} :: players=${party.map(s=>s._user).join(',')}`)
+
     broadcastQueue('match formed')
 
     game.onEnd = (reason) => {

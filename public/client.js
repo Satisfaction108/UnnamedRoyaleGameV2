@@ -73,8 +73,14 @@ const STAT_COLORS = ['#f59e0b','#ec4899','#8b5cf6','#3b82f6','#eab308','#ef4444'
 let statLabels = ['Health Regen','Max Health','Body Damage','Bullet Speed','Bullet Penetration','Bullet Damage','Reload','Movement Speed']
 let statPoints = 33
 let statLevels = new Array(8).fill(0)
+const STAT_MAX = 9
 
-const STAT_MAX = 9  // ⬅ cap per stat
+
+// gamemode HUD state (from server)
+let modeState = null
+let myRespawnUntil = 0
+
+
 
 
 // UI tween levels (smoothly animate toward statLevels)
@@ -140,6 +146,10 @@ battleStartAt = (typeof m.battleStartAt === 'number') ? m.battleStartAt : 0
 countdownActive = battleStartAt > 0
 rosterSlide = 0
 rosterCache = Array.isArray(m.roster) ? m.roster.slice() : []
+
+// 🎮 remember gamemode for the roster header/banner
+window.__gamemode = (m.gamemode && typeof m.gamemode === 'object') ? m.gamemode : { id:'BLITZ', name:'Blitz Battle' }
+
 
 if (Array.isArray(m.statLevels)) statLevels = m.statLevels.slice(0,8)
 if (typeof m.statPoints === 'number') statPoints = m.statPoints|0
@@ -296,7 +306,11 @@ function handle(msg) {
       }
     }
 
-    snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsMap })
+  snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsMap })
+
+  // 🎮 keep the latest mode payload + my respawn ETA
+  modeState = msg.mode || null
+  myRespawnUntil = (msg.you && typeof msg.you.respawnUntil === 'number') ? msg.you.respawnUntil : 0
 
     if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
 
@@ -364,10 +378,10 @@ if (k === 'e') {
 
 if (k >= '1' && k <= '8') {
   const idx = (k.charCodeAt(0) - '1'.charCodeAt(0)) | 0
-  if (ws && ws.readyState === 1) {
+  if (statPoints > 0 && (statLevels[idx] | 0) < STAT_MAX && ws && ws.readyState === 1) {
     ws.send(JSON.stringify({ type: 'upgrade', index: idx }))
+    statAnim[idx] = performance.now()
   }
-  statAnim[idx] = performance.now()    // 🔔 bump animation
   e.preventDefault()
   return
 }
@@ -610,7 +624,9 @@ drawExitCountdown()
 if (countdownActive || rosterSlide < 1) drawCountdownAndRoster()
 if (me && !me.alive) drawDeathOverlay()
 
-drawStatBar()  // 📊 new
+drawModeHud()   // 👈 new: bottom-left mode info (kills, timers, rounds)
+drawStatBar()
+
 
 
   anim = requestAnimationFrame(loop)
@@ -632,6 +648,91 @@ drawStatBar()  // 📊 new
       }
     }
   }
+
+  function drawModeHud(){
+  if (!modeState || !modeState.id) return
+  const pad = 12
+  const x = pad, y = viewH - 92
+  const line = (i) => y + i*22
+
+  ctx.save()
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.font = '600 16px Inter, system-ui, -apple-system, Segoe UI'
+  // background
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fillRect(x-8, y-8, 360, 88)
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'
+  ctx.strokeRect(x-8+0.5, y-8+0.5, 360-1, 88-1)
+
+  // top label = mode name
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
+  ctx.fillText(modeState.name || modeState.id, x, line(0))
+
+  const serverNow = Date.now() - serverOffset
+
+  if (modeState.id === 'BLITZ' && modeState.blitz) {
+  const k = modeState.blitz.teamKills || [0,0]
+  const secs = Math.max(0, Math.ceil((modeState.blitz.timeLeftMs||0)/1000))
+  const myTeam = (window.__myTeam ?? 0) | 0
+  const your = k[myTeam | 0] | 0
+  const enemy = k[(myTeam ^ 1) | 0] | 0
+
+  ctx.font = '600 15px Inter, system-ui, -apple-system, Segoe UI'
+  // colored dots
+  const dot = (cx, cy, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fill() }
+  ctx.fillStyle = 'rgba(255,255,255,0.88)'
+  dot(x+6, line(1), '#34d399'); ctx.fillText(`Your Team: ${your}`,  x + 18, line(1))
+  dot(x+6, line(2), '#60a5fa'); ctx.fillText(`Enemy: ${enemy}`,     x + 18, line(2))
+  ctx.fillText(`Time Left: ${secs}s`, x, line(3))
+
+
+} else if (modeState.id === 'LTS' && modeState.lts) {
+  const wins = modeState.lts.teamWins || [0,0]
+  const myTeam = (window.__myTeam ?? 0) | 0
+  const your = wins[myTeam | 0] | 0
+  const enemy = wins[(myTeam ^ 1) | 0] | 0
+
+  const played = (wins[0] | 0) + (wins[1] | 0) // 0..3
+  const interEnd = modeState.lts.interRoundEndAt || 0
+  const interNow = interEnd && serverNow < interEnd
+  const target = interNow ? Math.max(0, Math.ceil((interEnd - serverNow)/1000)) : 0
+
+  ctx.font = '600 15px Inter, system-ui, -apple-system, Segoe UI'
+  // colored dots for clarity
+  const dot = (cx, cy, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fill() }
+  ctx.fillStyle = 'rgba(255,255,255,0.88)'
+  dot(x+6, line(1), '#34d399'); ctx.fillText(`Your Wins: ${your}`,  x + 18, line(1))
+  dot(x+6, line(2), '#60a5fa'); ctx.fillText(`Enemy Wins: ${enemy}`, x + 18, line(2))
+
+  if (interNow) {
+    const ending = (played >= 3 || (wins[0] >= 2 || wins[1] >= 2))
+    const label = ending ? 'ENDING MATCH' : 'STARTING NEW ROUND'
+    ctx.fillText(`ROUND ENDED (${Math.min(3, played)}/3) • ${label} in ${target}s`, x, line(3))
+  } else {
+    ctx.fillText(`One life • Best of 3`, x, line(3))
+  }
+}
+ else if (modeState.id === 'TIME') {
+    ctx.font = '600 15px Inter, system-ui, -apple-system, Segoe UI'
+    ctx.fillStyle = 'rgba(255,255,255,0.88)'
+    ctx.fillText(`Speed-up: faster movement & bullets`, x, line(1))
+  }
+
+// Respawn countdown (Blitz only)
+// Respawn countdown (Blitz only)
+if (modeState.id === 'BLITZ' && myRespawnUntil && serverNow < myRespawnUntil) {
+  const secs = Math.max(0, Math.ceil((myRespawnUntil - serverNow) / 1000))
+  ctx.font = '700 15px Inter, system-ui, -apple-system, Segoe UI'
+  ctx.fillStyle = 'rgba(255,255,255,0.96)'
+  ctx.fillText(`RESPAWNING SOON… ${secs}s`, x, line(4))
+}
+
+
+
+  ctx.restore()
+}
+
 
 function drawWorld() {
   ctx.fillStyle = '#05080f'
@@ -943,23 +1044,37 @@ function drawBulletDeaths() {
     ctx.restore()
   }
 
-  function drawDeathOverlay() {
-    ctx.save()
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'
-    ctx.fillRect(0, 0, viewW, viewH)
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.font = 'bold 72px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-    ctx.fillStyle = '#ffdddd'
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)'
-    ctx.lineWidth = 6
-    ctx.strokeText('YOU DIED', viewW / 2, viewH / 2 - 10)
-    ctx.fillText('YOU DIED', viewW / 2, viewH / 2 - 10)
-    ctx.font = '20px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
-    ctx.fillText('Spectating until the battle ends…', viewW / 2, viewH / 2 + 36)
-    ctx.restore()
+function drawDeathOverlay() {
+  const serverNow = Date.now() - serverOffset
+  const willRespawn =
+    !!(modeState && modeState.id === 'BLITZ' && myRespawnUntil && serverNow < myRespawnUntil)
+  const secs = willRespawn ? Math.max(0, Math.ceil((myRespawnUntil - serverNow) / 1000)) : 0
+  const spectateMsg =
+    (modeState && modeState.id === 'LTS')
+      ? 'Spectating until the round ends…'
+      : 'Spectating until the battle ends…'
+
+  ctx.save()
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fillRect(0, 0, viewW, viewH)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = 'bold 72px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+  ctx.fillStyle = '#ffdddd'
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+  ctx.lineWidth = 6
+  ctx.strokeText('YOU DIED', viewW / 2, viewH / 2 - 10)
+  ctx.fillText('YOU DIED', viewW / 2, viewH / 2 - 10)
+  ctx.font = '20px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
+  if (willRespawn) {
+    ctx.fillText(`RESPAWNING SOON… ${secs}s`, viewW / 2, viewH / 2 + 36)
+  } else {
+    ctx.fillText(spectateMsg, viewW / 2, viewH / 2 + 36)
   }
+  ctx.restore()
+}
+
 
   function regularPolygonScreen(cx, cy, r, sides, rot = 0) {
     const out = []
@@ -1040,10 +1155,25 @@ if (overlayAlpha > 0) {
 }
 
 
-    // header
-    ctx.font = '600 22px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.9)'
-    ctx.fillText('Battle starts in', viewW / 2, viewH * 0.32)
+ctx.font = '600 22px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+ctx.fillStyle = 'rgba(255,255,255,0.9)'
+ctx.fillText('Battle starts in', viewW / 2, viewH * 0.32)
+
+// gamemode banner at the VERY TOP, centered
+const gm = window.__gamemode || {}
+const GM_DESC = {
+  BLITZ: 'Timed match • Most team kills wins.',
+  LTS:   '3v3 • One life • Best of 3 • Losing a player grants your team stat points.',
+  TIME:  'Global speed-up • Faster movement & bullet speed.'
+}
+ctx.font = '700 18px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+ctx.fillStyle = 'rgba(255,255,255,0.95)'
+ctx.fillText((gm.name || gm.id || ''), viewW / 2, 36)
+ctx.font = '600 14px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+ctx.fillStyle = 'rgba(255,255,255,0.8)'
+ctx.fillText(GM_DESC[gm.id || ''] || '', viewW / 2, 60)
+
+
 
     // big pulsing number
     ctx.translate(viewW / 2, viewH * 0.42)
@@ -1185,14 +1315,15 @@ function onStatBarClick(e){
   for (let i = 0; i < statRects.length; i++){
     const R = statRects[i]
     if (!R) continue
-    if (mx >= R.x && mx <= R.x + R.w && my >= R.y && my <= R.y + R.h){
-      if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: 'upgrade', index: i }))
-      }
-      statAnim[i] = performance.now()  // 🔔 bump animation
-      e.preventDefault()
-      return
-    }
+if (mx >= R.x && mx <= R.x + R.w && my >= R.y && my <= R.y + R.h){
+  if (statPoints > 0 && (statLevels[i] | 0) < STAT_MAX && ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'upgrade', index: i }))
+    statAnim[i] = performance.now()
+  }
+  e.preventDefault()
+  return
+}
+
   }
 }
 function withAlpha(hex, a = 1){
@@ -1264,8 +1395,9 @@ ctx.fillStyle = '#e5e7eb'
 ctx.fillText(statLabels[i] || `Stat ${i+1}`, x + 12, y + rowH/2)
 
 // level fill (tweened) — colored to the row's key color
-const lvl = statUiLevels[i]
-const frac = Math.min(1, lvl / STAT_MAX)
+const lvl = Math.min(STAT_MAX, statUiLevels[i] | 0)
+const frac = lvl / STAT_MAX
+
 ctx.fillStyle = withAlpha(STAT_COLORS[i] || '#ffffff', 0.35)
 ctx.fillRect(x, y, barW * frac, rowH)
 
