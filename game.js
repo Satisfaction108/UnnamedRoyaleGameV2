@@ -25,7 +25,9 @@ const STAT_STEPS = {
 }
 function mul(step, lvl){ return Math.pow(1 + step, Math.max(0, lvl|0)) }
 function timeMul(step, lvl){ return Math.pow(1 - step, Math.max(0, lvl|0)) } // smaller is faster
+const STAT_MAX = 9
 // ─────────────────────────────────────────────────────────────────────────────
+
 
 
 export default class Game {
@@ -196,17 +198,24 @@ safeSend(p.ws, {
             if (!st?.alive) return
             this._shootFromTank(p.id, st)
           }
-          if (d.type === 'upgrade') {
+if (d.type === 'upgrade') {
   const idx = (d.index|0)
   const mine = this.stats.get(p.id)
-  if (mine && idx >= 0 && idx < 8 && mine.points > 0) {
-    mine.points -= 1
-    mine.levels[idx] += 1
-    this._recomputeDerivedFromStats(p.id)
-    // tell only that player
-    safeSend(p.ws, { type: 'stats', points: mine.points, levels: mine.levels })
+  if (!mine || idx < 0 || idx >= 8) { /* ignore */ }
+  else {
+    const cur = mine.levels[idx] | 0
+    if (cur >= STAT_MAX) {
+      // already capped → no-op (also prevents point drain)
+      safeSend(p.ws, { type: 'stats', points: mine.points, levels: mine.levels })
+    } else if (mine.points > 0) {
+      mine.points -= 1
+      mine.levels[idx] = Math.min(STAT_MAX, cur + 1)
+      this._recomputeDerivedFromStats(p.id)
+      safeSend(p.ws, { type: 'stats', points: mine.points, levels: mine.levels })
+    }
   }
 }
+
           if (d.type === 'leaveGame') this.end('left')
         } catch {}
       }

@@ -74,6 +74,9 @@ let statLabels = ['Health Regen','Max Health','Body Damage','Bullet Speed','Bull
 let statPoints = 33
 let statLevels = new Array(8).fill(0)
 
+const STAT_MAX = 9  // ⬅ cap per stat
+
+
 // UI tween levels (smoothly animate toward statLevels)
 let statUiLevels = new Array(8).fill(0)
 
@@ -1192,6 +1195,13 @@ function onStatBarClick(e){
     }
   }
 }
+function withAlpha(hex, a = 1){
+  // accepts '#rrggbb'
+  const h = (hex && hex[0] === '#') ? hex.slice(1) : hex
+  const n = parseInt(h, 16)
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+  return `rgba(${r},${g},${b},${a})`
+}
 
 
 function drawStatBar(){
@@ -1248,15 +1258,17 @@ function drawStatBar(){
     ctx.lineWidth = 2
     ctx.strokeRect(x+0.5, y+0.5, barW-1, rowH-1)
 
-    // left-aligned label
-    ctx.fillStyle = '#e5e7eb'
-    ctx.fillText(statLabels[i] || `Stat ${i+1}`, x + 12, y + rowH/2)
+// label (bold now, fixes "Health Regen" looking lighter)
+ctx.font = 'bold 16px Inter, system-ui, -apple-system, Segoe UI'
+ctx.fillStyle = '#e5e7eb'
+ctx.fillText(statLabels[i] || `Stat ${i+1}`, x + 12, y + rowH/2)
 
-    // level fill (tweened), does not affect total bar length
-    const lvl = statUiLevels[i]
-    const frac = Math.min(1, lvl / 10)
-    ctx.fillStyle = 'rgba(255,255,255,0.18)'
-    ctx.fillRect(x, y, barW * frac, rowH)
+// level fill (tweened) — colored to the row's key color
+const lvl = statUiLevels[i]
+const frac = Math.min(1, lvl / STAT_MAX)
+ctx.fillStyle = withAlpha(STAT_COLORS[i] || '#ffffff', 0.35)
+ctx.fillRect(x, y, barW * frac, rowH)
+
 
     // right key cap
     const keyW = 64
