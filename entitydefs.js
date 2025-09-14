@@ -8,7 +8,7 @@ const ENTITY_DEFS = {
     kind: 'circle',
     r: 18,
     mass: 2.2,
-    friction: 0.985,
+    friction: 0.995,
     color: '#ffffff',   // base fill
     outline: '#0f172a', // rim
 

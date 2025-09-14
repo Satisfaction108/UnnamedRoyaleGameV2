@@ -661,6 +661,14 @@ const fr = ball.friction || 0.985
 ball.vx = (ball.vx || 0) * fr
 ball.vy = (ball.vy || 0) * fr
 
+// spin once per tick (reduced gain + cap)
+{
+  const speed = Math.hypot(ball.vx || 0, ball.vy || 0)
+  const gain  = speed / Math.max(8, ball.r * 2)  // ↓ slower spin
+  ball.spin   = (ball.spin || 0) + gain * dt
+  if (ball.spin > 6) ball.spin = 6               // clamp max spin rate
+}
+
 // ⛔ world bounds (bounce + damp)
 if (ball.x - ball.r < 0)                   { ball.x = ball.r;                         ball.vx =  Math.abs(ball.vx) * 0.6 }
 if (ball.x + ball.r > this.bounds.w)       { ball.x = this.bounds.w - ball.r;        ball.vx = -Math.abs(ball.vx) * 0.6 }
@@ -709,30 +717,54 @@ for (const w of this.walls) {
       }
     }
 
-    // player vs ball: push using circle-circle MTV + transfer velocity
-    for (const p of this.players) {
-      const st = this.state.get(p.id)
-      if (!st?.alive) continue
-      const r = getBoundingRadius(st)
-      const dx = ball.x - st.x, dy = ball.y - st.y
-      const minD = r + ball.r
-      const d2 = dx*dx + dy*dy
-      if (d2 <= minD*minD) {
-        const d = Math.sqrt(d2) || 1
-        const nx = dx / d, ny = dy / d
-        const pen = (r + ball.r) - d
-        // move ball out
-        ball.x += nx * pen
-        ball.y += ny * pen
-        // add knock
-        const push = 120 / (ball.mass || 1)
-        ball.vx += nx * push
-        ball.vy += ny * push
-      }
-    }
+// ...player vs ball push...
+for (const p of this.players) {
+  const st = this.state.get(p.id)
+  if (!st?.alive) continue
+  const r = getBoundingRadius(st)
+  const dx = ball.x - st.x, dy = ball.y - st.y
+  const minD = r + ball.r
+  const d2 = dx*dx + dy*dy
+  if (d2 <= minD*minD) {
+    const d = Math.sqrt(d2) || 1
+    const nx = dx / d, ny = dy / d
+    const pen = (r + ball.r) - d
+    ball.x += nx * pen
+    ball.y += ny * pen
+    const push = 120 / (ball.mass || 1)
+    ball.vx += nx * push
+    ball.vy += ny * push
+  }
+}
 
-    // goal scoring: if ball center inside goal AABB → point
-    const inAABB = (e) => (ball.x >= e.x && ball.x <= e.x + e.width && ball.y >= e.y && ball.y <= e.y + e.height)
+// ⏪ second-pass: keep ball out of walls after player shove
+{
+  // world bounds with bounce
+  if (ball.x - ball.r < 0)             { ball.x = ball.r;                  ball.vx =  Math.abs(ball.vx) * 0.6 }
+  if (ball.x + ball.r > this.bounds.w) { ball.x = this.bounds.w - ball.r;  ball.vx = -Math.abs(ball.vx) * 0.6 }
+  if (ball.y - ball.r < 0)             { ball.y = ball.r;                  ball.vy =  Math.abs(ball.vy) * 0.6 }
+  if (ball.y + ball.r > this.bounds.h) { ball.y = this.bounds.h - ball.r;  ball.vy = -Math.abs(ball.vy) * 0.6 }
+
+  // walls: resolve & reflect again (twice for robustness)
+  for (let pass = 0; pass < 2; pass++) {
+    for (const w of this.walls) {
+      const hit = resolveCircleVsAabb(ball.x, ball.y, ball.r, w.x, w.y, w.width, w.height)
+      if (!hit) continue
+      ball.x += hit.mtvx
+      ball.y += hit.mtvy
+      const len = Math.hypot(hit.mtvx || 0, hit.mtvy || 0) || 1
+      const nx = (hit.mtvx || 0) / len
+      const ny = (hit.mtvy || 0) / len
+      const vdotn = (ball.vx || 0) * nx + (ball.vy || 0) * ny
+      if (vdotn < 0) { ball.vx -= 2 * vdotn * nx; ball.vy -= 2 * vdotn * ny }
+      ball.vx *= 0.55; ball.vy *= 0.55
+    }
+  }
+}
+
+// goal scoring...
+const inAABB = (e) => (ball.x >= e.x && ball.x <= e.x + e.width && ball.y >= e.y && ball.y <= e.y + e.height)
+
 
     let scoredBy = null
     if (goalL && inAABB(goalL)) scoredBy = 0  // into LEFT goal -> point for team 0
@@ -974,16 +1006,7 @@ if (typeof ru === 'number') youPayload.respawnUntil = ru
 // lightweight entities payload (render-only)
 // during soccer-ball step, after friction:
 // only adjust ball when in soccer AND ball exists
-if (this.gamemode.id === 'SOCCER') {
-  const ball = this.entities.find(e => e.type === 'SoccerBall')
-  if (ball) {
-    const fr = ball.friction || 0.985
-    ball.vx = (ball.vx || 0) * fr
-    ball.vy = (ball.vy || 0) * fr
-    const speed = Math.hypot(ball.vx || 0, ball.vy || 0)
-    ball.spin = (ball.spin || 0) + (speed / Math.max(1, ball.r)) * dt
-  }
-}
+
 
 
 
@@ -1123,7 +1146,6 @@ function buildWallsFromGrid(ascii, bounds) {
   return walls
 }
 
-// circle vs AABB — returns minimal translation vector {mtvx, mtvy} or null
 function resolveCircleVsAabb(cx, cy, r, rx, ry, rw, rh) {
   const nearestX = clamp(cx, rx, rx + rw)
   const nearestY = clamp(cy, ry, ry + rh)
@@ -1131,17 +1153,17 @@ function resolveCircleVsAabb(cx, cy, r, rx, ry, rw, rh) {
   let dy = cy - nearestY
   const distSq = dx*dx + dy*dy
   if (distSq >= r*r) {
-    // inside-rect special case (center inside): push out along smallest axis
+    // center inside rectangle → eject fully past the nearest side
     if (cx > rx && cx < rx + rw && cy > ry && cy < ry + rh) {
-      const left = cx - rx
-      const right = (rx + rw) - cx
-      const top = cy - ry
+      const left   = cx - rx
+      const right  = (rx + rw) - cx
+      const top    = cy - ry
       const bottom = (ry + rh) - cy
       const m = Math.min(left, right, top, bottom)
-      if (m === left)  return { mtvx: r - left,  mtvy: 0 }
-      if (m === right) return { mtvx: -(r - right), mtvy: 0 }
-      if (m === top)   return { mtvx: 0, mtvy: r - top }
-      if (m === bottom)return { mtvx: 0, mtvy: -(r - bottom) }
+      if (m === left)   return { mtvx:  (r + left),  mtvy: 0 }   // shove right
+      if (m === right)  return { mtvx: -(r + right), mtvy: 0 }   // shove left
+      if (m === top)    return { mtvx: 0, mtvy:  (r + top) }     // shove down
+      if (m === bottom) return { mtvx: 0, mtvy: -(r + bottom) }  // shove up
     }
     return null
   }
