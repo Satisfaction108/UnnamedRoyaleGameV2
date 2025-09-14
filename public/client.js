@@ -306,11 +306,21 @@ function handle(msg) {
       }
     }
 
-  snapshots.push({ ts: msg.ts ?? Date.now() - serverOffset, map, bullets: bulletsMap })
+// take entities from the server state for interpolation & render
+const entitiesArr = Array.isArray(msg.entities) ? msg.entities.slice() : []
 
-  // 🎮 keep the latest mode payload + my respawn ETA
-  modeState = msg.mode || null
-  myRespawnUntil = (msg.you && typeof msg.you.respawnUntil === 'number') ? msg.you.respawnUntil : 0
+// record this snapshot (players + bullets + entities) for interpolation
+snapshots.push({
+  ts: (typeof msg.ts === 'number') ? msg.ts : (Date.now() - serverOffset),
+  map,
+  bullets: bulletsMap,
+  entities: entitiesArr
+})
+
+// latest gamemode/HUD payload and my respawn ETA
+modeState = msg.mode || null
+myRespawnUntil = (msg.you && typeof msg.you.respawnUntil === 'number') ? msg.you.respawnUntil : 0
+
 
     if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift()
 
@@ -457,10 +467,11 @@ function onWheel(e) {
 
   function getInterpolated(renderServerTime) {
     if (snapshots.length === 0) return []
-    if (snapshots.length === 1) {
-      const only = snapshots[0].map
-      return [...only.entries()].map(([id, p]) => ({ id, ...p }))
-    }
+if (snapshots.length === 1) {
+  const only = snapshots[0].map
+  return Array.from(only.entries()).map(([id, p]) => ({ id, ...p }))
+}
+
     let i = snapshots.length - 2
     while (i >= 0 && snapshots[i].ts > renderServerTime) i--
     const a = Math.max(0, i), b = Math.min(snapshots.length - 1, a + 1)
@@ -485,12 +496,65 @@ function onWheel(e) {
     return out
   }
 
+function getInterpolatedEntities(renderServerTime) {
+  if (snapshots.length === 0) return []
+  if (snapshots.length === 1) return (snapshots[0].entities || []).slice()
+
+  let i = snapshots.length - 2
+  while (i >= 0 && (snapshots[i].ts > renderServerTime)) i--
+  const a = Math.max(0, i), b = Math.min(snapshots.length - 1, a + 1)
+  const s0 = snapshots[a], s1 = snapshots[b]
+  const t0 = s0.ts, t1 = s1.ts
+  const t = (t1 === t0) ? 1 : Math.max(0, Math.min(1, (renderServerTime - t0) / (t1 - t0)))
+
+  const byId0 = Object.create(null), byId1 = Object.create(null)
+  for (const e of (s0.entities || [])) byId0[e.id] = e
+  for (const e of (s1.entities || [])) byId1[e.id] = e
+
+  const ids = new Set([...(s0.entities||[]).map(e=>e.id), ...(s1.entities||[]).map(e=>e.id)])
+  const out = []
+  ids.forEach((id) => {
+    const e0 = byId0[id] || byId1[id]
+    const e1 = byId1[id] || byId0[id]
+    if (!e0 || !e1) return
+    const x = e0.x + (e1.x - e0.x) * t
+    const y = e0.y + (e1.y - e0.y) * t
+
+// getInterpolatedEntities: keep motion + spin (simple copy or angle-lerp if you prefer)
+if (e1.kind === 'circle') {
+  const spin = (e0.spin != null && e1.spin != null) ? lerpAngle(e0.spin, e1.spin, t) : (e1.spin || 0)
+  out.push({
+    id, type: e1.type, kind: 'circle',
+    x, y, r: e1.r, color: e1.color, outline: e1.outline,
+    pathLocal: e1.pathLocal || null,
+    vx: e1.vx || 0, vy: e1.vy || 0, spin
+  })
+}
+ else if (e1.kind === 'aabb') {
+      out.push({
+        id, type: e1.type, kind: 'aabb',
+        x, y, width: e1.width, height: e1.height, color: e1.color, team: e1.team
+      })
+    } else if (e1.kind === 'path') {
+      out.push({
+        id, type: e1.type, kind: 'path',
+        path: Array.isArray(e1.path) ? e1.path : [],
+        stroke: e1.stroke, strokeWidth: e1.strokeWidth, fill: e1.fill, color: e1.color
+      })
+    }
+  })
+  return out
+}
+
+
+
 function getInterpolatedBullets(renderServerTime) {
   if (snapshots.length === 0) return []
-  if (snapshots.length === 1) {
-    const only = snapshots[0].bullets || new Map()
-    return [...only.values()]
-  }
+if (snapshots.length === 1) {
+  const only = snapshots[0].map
+  return Array.from(only.entries()).map(([id, p]) => ({ id, ...p }))
+}
+
   let i = snapshots.length - 2
   while (i >= 0 && (snapshots[i].ts > renderServerTime)) i--
   const a = Math.max(0, i), b = Math.min(snapshots.length - 1, a + 1)
@@ -612,9 +676,10 @@ if (countdownActive && battleStartAt) {
   camera.x = clamp(camera.x, 0, world.w)
   camera.y = clamp(camera.y, 0, world.h)
 
-  // render
-  ctx.clearRect(0, 0, viewW, viewH)
+ctx.clearRect(0, 0, viewW, viewH)
 drawWorld()
+const entities = getInterpolatedEntities(renderServerTime)
+drawEntities(entities)   // 👈 NEW
 drawPlayers(players)
 const bullets = getInterpolatedBullets(renderServerTime)
 drawBullets(bullets)
@@ -624,7 +689,7 @@ drawExitCountdown()
 if (countdownActive || rosterSlide < 1) drawCountdownAndRoster()
 if (me && !me.alive) drawDeathOverlay()
 
-drawModeHud()   // 👈 new: bottom-left mode info (kills, timers, rounds)
+drawModeHud()
 drawStatBar()
 
 
@@ -632,6 +697,69 @@ drawStatBar()
   anim = requestAnimationFrame(loop)
 
 }
+function drawEntities(entities) {
+  const myTeam = (window.__myTeam ?? 0) | 0
+  for (const e of entities) {
+    if (e.kind === 'circle') {
+      const sx = worldToScreenX(e.x)
+      const sy = worldToScreenY(e.y)
+      const rr = (e.r || 12) * zoom
+
+      // base disk
+      ctx.fillStyle = e.color || '#f3f4f6'
+      ctx.beginPath()
+      ctx.arc(sx, sy, rr, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.lineWidth = 3
+      ctx.strokeStyle = e.outline || 'rgba(0,0,0,0.6)'
+      ctx.stroke()
+
+     // optional LOCAL decorative paths (relative to center & radius)
+if (Array.isArray(e.pathLocal)) {
+  ctx.save()
+  ctx.translate(sx, sy)
+  if (typeof e.spin === 'number') ctx.rotate(e.spin)  // 🌀 spin based on server
+  for (const p of e.pathLocal) {
+    ctx.beginPath()
+    const cmds = p.commands || p.cmds || []
+    for (let i = 0; i < cmds.length; i++) {
+      const c = cmds[i]
+      if (c.cmd === 'M') ctx.moveTo(c.ax * rr, c.ay * rr)
+      else if (c.cmd === 'L') ctx.lineTo(c.ax * rr, c.ay * rr)
+    }
+    if (p.fill) { ctx.fillStyle = p.fill; ctx.fill() }
+    if (p.stroke || p.strokeWidthFactor) {
+      ctx.lineWidth = Math.max(1, (p.strokeWidthFactor ? p.strokeWidthFactor * rr : 1))
+      ctx.strokeStyle = p.stroke || '#000'; ctx.stroke()
+    }
+  }
+  ctx.restore()
+}
+
+    } else if (e.kind === 'aabb') {
+      const sx = worldToScreenX(e.x)
+      const sy = worldToScreenY(e.y)
+      const sw = Math.max(1, Math.floor(e.width * zoom))
+      const sh = Math.max(1, Math.floor(e.height * zoom))
+
+      // Team-aware goal tinting:
+      //   - your goal = your team color
+      //   - enemy goal = enemy color
+      let color = e.color || '#64748b'
+      if (typeof e.team === 'number') {
+        const enemy = e.team !== myTeam
+        color = enemy ? '#ef4444' /* red-ish */ : '#22c55e' /* green-ish */
+      }
+
+      ctx.fillStyle = color + '80' // translucent fill
+      ctx.fillRect(sx, sy, sw, sh)
+      ctx.lineWidth = 2
+      ctx.strokeStyle = color
+      ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1)
+    }
+  }
+}
+
 
 
   function maybeSendAim(me) {
@@ -718,15 +846,30 @@ drawStatBar()
     ctx.fillStyle = 'rgba(255,255,255,0.88)'
     ctx.fillText(`Speed-up: faster movement & bullets`, x, line(1))
   }
+   else if (modeState.id === 'SOCCER' && modeState.soccer) {
+  const scores = modeState.soccer.teamScores || [0,0]
+  const need = modeState.soccer.goalsToWin || 3
+  const myTeam = (window.__myTeam ?? 0) | 0
+  const your = scores[myTeam] | 0
+  const enemy = scores[myTeam ^ 1] | 0
 
-// Respawn countdown (Blitz only)
-// Respawn countdown (Blitz only)
-if (modeState.id === 'BLITZ' && myRespawnUntil && serverNow < myRespawnUntil) {
+  ctx.font = '600 15px Inter, system-ui, -apple-system, Segoe UI'
+  const dot = (cx, cy, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fill() }
+  ctx.fillStyle = 'rgba(255,255,255,0.88)'
+  dot(x+6, line(1), '#34d399'); ctx.fillText(`Your Goals: ${your}`,  x + 18, line(1))
+  dot(x+6, line(2), '#60a5fa'); ctx.fillText(`Enemy Goals: ${enemy}`, x + 18, line(2))
+  ctx.fillText(`First to ${need}`, x, line(3))
+}
+
+
+// Respawn countdown (Blitz & Soccer)
+if ((modeState.id === 'BLITZ' || modeState.id === 'SOCCER') && myRespawnUntil && serverNow < myRespawnUntil) {
   const secs = Math.max(0, Math.ceil((myRespawnUntil - serverNow) / 1000))
   ctx.font = '700 15px Inter, system-ui, -apple-system, Segoe UI'
   ctx.fillStyle = 'rgba(255,255,255,0.96)'
   ctx.fillText(`RESPAWNING SOON… ${secs}s`, x, line(4))
 }
+
 
 
 
@@ -807,7 +950,8 @@ function drawPlayers(ps) {
     let theirTeam = (typeof p.team === 'number') ? p.team : teamById.get(p.id)
     if (typeof theirTeam !== 'number') theirTeam = -1
 
-    const fill = !p.alive ? '#4b5563' : (theirTeam === myTeam ? '#34d399' : '#60a5fa')
+const fill = !p.alive ? '#4b5563' : (theirTeam === myTeam ? '#34d399' : '#ef4444')
+
     const stroke = darker(fill, 0.6)
 
 if (tank?.barrels?.length) {
@@ -1046,8 +1190,9 @@ function drawBulletDeaths() {
 
 function drawDeathOverlay() {
   const serverNow = Date.now() - serverOffset
-  const willRespawn =
-    !!(modeState && modeState.id === 'BLITZ' && myRespawnUntil && serverNow < myRespawnUntil)
+const willRespawn =
+  !!(modeState && (modeState.id === 'BLITZ' || modeState.id === 'SOCCER') && myRespawnUntil && serverNow < myRespawnUntil)
+
   const secs = willRespawn ? Math.max(0, Math.ceil((myRespawnUntil - serverNow) / 1000)) : 0
   const spectateMsg =
     (modeState && modeState.id === 'LTS')
@@ -1162,10 +1307,12 @@ ctx.fillText('Battle starts in', viewW / 2, viewH * 0.32)
 // gamemode banner at the VERY TOP, centered
 const gm = window.__gamemode || {}
 const GM_DESC = {
-  BLITZ: 'Timed match • Most team kills wins.',
-  LTS:   '3v3 • One life • Best of 3 • Losing a player grants your team stat points.',
-  TIME:  'Global speed-up • Faster movement & bullet speed.'
+  BLITZ:  'Timed match • Most team kills wins.',
+  LTS:    '3v3 • One life • Best of 3 • Losing a player grants your team stat points.',
+  TIME:   'Global speed-up • Faster movement & bullet speed.',
+  SOCCER: '3v3 • Shoot the giant ball into enemy goal • First to 3 wins.'
 }
+
 ctx.font = '700 18px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
 ctx.fillStyle = 'rgba(255,255,255,0.95)'
 ctx.fillText((gm.name || gm.id || ''), viewW / 2, 36)

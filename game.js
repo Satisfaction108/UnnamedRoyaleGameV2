@@ -1,14 +1,16 @@
 ﻿import { randomUUID } from 'node:crypto'
 import TANK_DEFS from './tankdefs.js'
 import BULLET_DEFS from './bulletdefs.js'
+import ENTITY_DEFS from './entitydefs.js'  // 👈 NEW
 
-// ── GAMEMODES ───────────────────────────────────────────────────────────────────
+
 const GM = {
-  BLITZ: { id: 'BLITZ', name: 'Blitz Battle', lengthMs: 120_000, respawnMs: 3000 }, // 2m
-  LTS:   { id: 'LTS',   name: 'Last Team Standing', roundsToWin: 2, interRoundMs: 4000, lossStatPts: 3 },
-  TIME:  { id: 'TIME',  name: 'Time Shifter', moveMul: 1.35, bulletSpeedMul: 1.35 }
+  BLITZ:  { id: 'BLITZ',  name: 'Blitz Battle', lengthMs: 120_000, respawnMs: 3000 }, // 2m
+  LTS:    { id: 'LTS',    name: 'Last Team Standing', roundsToWin: 2, interRoundMs: 4000, lossStatPts: 3 },
+  TIME:   { id: 'TIME',   name: 'Time Shifter', moveMul: 1.35, bulletSpeedMul: 1.35 },
+  SOCCER: { id: 'SOCCER', name: 'Tank Soccer', goalsToWin: 3, respawnMs: 2500 }       // 👈 NEW
 }
-// ────────────────────────────────────────────────────────────────────────────────
+
 
 // ── STAT SYSTEM ──────────────────────────────────────────────────────────────
 const STAT_LABELS = [
@@ -61,28 +63,83 @@ export default class Game {
     const gridStr = typeof opts.mapGrid === 'string' ? opts.mapGrid : ''
     this.walls = buildWallsFromGrid(gridStr, this.bounds)  // [{x,y,width,height,color,strokeWidth}]
 
-    // 🎮 gamemode selection (from server) + per-mode state
-    const gmId = (opts.gamemode && GM[opts.gamemode]) ? opts.gamemode : 'BLITZ'
-    this.gamemode = { ...GM[gmId] }
+// 🎮 gamemode selection (from server) + per-mode state
+const gmId = (opts.gamemode && GM[opts.gamemode]) ? opts.gamemode : 'BLITZ'
+this.gamemode = { ...GM[gmId] }
 
-    // per-mode runtime bookkeeping
-    if (this.gamemode.id === 'BLITZ') {
-      this.modeEndAt = Date.now() + this.startDelayMs + this.gamemode.lengthMs
-      this.teamKills = [0, 0]
-      this._respawnTimers = new Map()
-    } else if (this.gamemode.id === 'LTS') {
-      this.round = 1
-      this.teamWins = [0, 0]
-      this._respawnTimers = new Map() // not used here (no respawns), but kept for symmetry
-    } else if (this.gamemode.id === 'TIME') {
-      this._respawnTimers = new Map()
-      // nothing else needed here — multipliers applied where relevant
-    }
+// entities (ball + goals etc.)
+this.entities = []   // [{ id, kind:'circle'|'aabb', x,y, r | (width,height), vx,vy, static, team, color }]
+this._entitySeq = 1
 
-    const spawn = [
-      { x: this.bounds.w * 0.25, y: this.bounds.h * 0.5 },
-      { x: this.bounds.w * 0.75, y: this.bounds.h * 0.5 },
-    ]
+// per-mode runtime bookkeeping
+if (this.gamemode.id === 'BLITZ') {
+  this.modeEndAt = Date.now() + this.startDelayMs + this.gamemode.lengthMs
+  this.teamKills = [0, 0]
+  this._respawnTimers = new Map()
+} else if (this.gamemode.id === 'LTS') {
+  this.round = 1
+  this.teamWins = [0, 0]
+  this._respawnTimers = new Map() // not used here (no respawns), but kept for symmetry
+} else if (this.gamemode.id === 'TIME') {
+  this._respawnTimers = new Map()
+} else if (this.gamemode.id === 'SOCCER') {
+  this._respawnTimers = new Map()
+  this.teamScores = [0, 0]
+
+  // spawn ball at center (include local paths from defs)
+  const ballDef = ENTITY_DEFS.SoccerBall
+  this.entities.push({
+    id: this._entitySeq++,
+    type: 'SoccerBall',
+    kind: 'circle',
+    x: this.bounds.w * 0.5,
+    y: this.bounds.h * 0.5,
+    r: ballDef.r,
+    vx: 0, vy: 0,
+    mass: ballDef.mass,
+    friction: ballDef.friction,
+    color: ballDef.color,
+    outline: ballDef.outline,
+    pathLocal: ballDef.pathLocal || null
+  })
+
+  // goals (left = team 1’s goal, right = team 0’s goal)
+  const goalW = 26
+  const goalH = Math.min(240, Math.floor(this.bounds.h * 0.55))
+  const goalTop = (this.bounds.h - goalH) * 0.5
+
+const teamColor = (t) => (t === 0 ? '#3b82f6' : '#ef4444') // tweak to your palette
+
+this.entities.push({
+  id: this._entitySeq++, type: 'GoalLeft', kind: 'aabb',
+  x: 0, y: goalTop, width: goalW, height: goalH, static: true,
+  team: 1, color: teamColor(1)
+})
+this.entities.push({
+  id: this._entitySeq++, type: 'GoalRight', kind: 'aabb',
+  x: this.bounds.w - goalW, y: goalTop, width: goalW, height: goalH, static: true,
+  team: 0, color: teamColor(0)
+})
+
+}
+
+
+
+const spawn = [
+  { x: this.bounds.w * 0.25, y: this.bounds.h * 0.5 },
+  { x: this.bounds.w * 0.75, y: this.bounds.h * 0.5 },
+]
+
+// helper used for Soccer spawns: along own goal, random Y
+const soccerSpawnForTeam = (team) => {
+  const goal = this.entities.find(e => (e.type === 'GoalLeft' || e.type === 'GoalRight') && e.team === team)
+  if (!goal) return { x: (team === 0) ? this.bounds.w * 0.75 : this.bounds.w * 0.25, y: this.bounds.h * 0.5 }
+  const pad = 22
+  const y = goal.y + pad + Math.random() * Math.max(1, goal.height - pad * 2)
+  // stand just inside the field, not inside the goal AABB
+  const x = (team === 1) ? (goal.x + goal.width + 40) : (goal.x - 40)
+  return { x, y }
+}
 
     const roster = players.map(p => ({
       id: p.id,
@@ -115,12 +172,17 @@ export default class Game {
       const bodyDamage = (typeof def.bodyDamage === 'number') ? def.bodyDamage : Math.round(20 + def.size * 3)
       const cameraSize = (typeof def.cameraSize === 'number') ? def.cameraSize : 500
       const barrels = (def.barrels || []).map(normBarrel)
+// pick spawn point (Soccer = along own goal at random Y)
+const team = this.playerTeam.get(p.id) ?? 0
+const s = (this.gamemode.id === 'SOCCER')
+  ? soccerSpawnForTeam(team)
+  : spawn[i % spawn.length]
 
-      const st = {
-        x: spawn[i % spawn.length].x,
-        y: spawn[i % spawn.length].y,
-        rot: 0,
-        size: def.size,
+const st = {
+  x: s.x,
+  y: s.y,
+  rot: 0,
+  size: def.size,
         // live values
         health: def.maxHealth,
         maxHealth: def.maxHealth,
@@ -289,11 +351,10 @@ if (d.type === 'upgrade') {
     st.reloadTimeMul= rlMul
   }
 _scheduleRespawn(pid, delayMs) {
-  // ⛔ Respawns are ONLY for BLITZ
-  if (this.gamemode.id !== 'BLITZ') return
+  // Respawns for BLITZ and SOCCER
+  if (this.gamemode.id !== 'BLITZ' && this.gamemode.id !== 'SOCCER') return
   if (this._respawnTimers?.has(pid)) return
 
-  // remember when this player will respawn (for HUD)
   if (!this._respawnUntil) this._respawnUntil = new Map()
   const until = Date.now() + Math.max(0, delayMs|0)
   this._respawnUntil.set(pid, until)
@@ -305,16 +366,27 @@ _scheduleRespawn(pid, delayMs) {
     if (!st || this.closed) return
     st.alive = true
     st.health = st.maxHealth
-    // spawn to team side
+
     const team = this.playerTeam.get(pid) || 0
-    const x = (team === 0) ? this.bounds.w * 0.25 : this.bounds.w * 0.75
-    const y = this.bounds.h * 0.5
-    st.x = x; st.y = y; st.rot = 0
+    if (this.gamemode.id === 'SOCCER') {
+      const goal = this.entities.find(e => (e.type === 'GoalLeft' || e.type === 'GoalRight') && e.team === team)
+      const pad = 22
+      const gy = goal ? goal.y + pad + Math.random() * Math.max(1, goal.height - pad * 2) : this.bounds.h * 0.5
+      const gx = goal ? ((team === 1) ? (goal.x + goal.width + 40) : (goal.x - 40)) : ((team === 0) ? this.bounds.w * 0.75 : this.bounds.w * 0.25)
+      st.x = clamp(gx, st.size, this.bounds.w - st.size)
+      st.y = clamp(gy, st.size, this.bounds.h - st.size)
+    } else {
+      st.x = (team === 0) ? this.bounds.w * 0.25 : this.bounds.w * 0.75
+      st.y = this.bounds.h * 0.5
+    }
+
+    st.rot = 0
     st.knockVx = 0; st.knockVy = 0
     st.reloadTimers = new Array(st.barrels.length).fill(0)
   }, Math.max(0, delayMs|0))
   this._respawnTimers.set(pid, t)
 }
+
 
 
 _awardTeamStatPoints(team, n) {
@@ -566,7 +638,127 @@ _resetForNextRound() {
           }
         }
       }
+
+
       this.bullets = this.bullets.filter(b => b.health > 0)
+
+      // ── ENTITIES (Tank Soccer) ─────────────────────────────────────────────────────
+// ── ENTITIES (Tank Soccer) ─────────────────────────────────────────────────────
+if (this.gamemode.id === 'SOCCER') {
+  // helpers
+  const ball = this.entities.find(e => e.type === 'SoccerBall')
+  const goalL = this.entities.find(e => e.type === 'GoalLeft')
+  const goalR = this.entities.find(e => e.type === 'GoalRight')
+
+  if (ball) {
+    // integrate
+// integrate
+ball.x += (ball.vx || 0) * dt
+ball.y += (ball.vy || 0) * dt
+
+// low friction (very slidey)
+const fr = ball.friction || 0.985
+ball.vx = (ball.vx || 0) * fr
+ball.vy = (ball.vy || 0) * fr
+
+// ⛔ world bounds (bounce + damp)
+if (ball.x - ball.r < 0)                   { ball.x = ball.r;                         ball.vx =  Math.abs(ball.vx) * 0.6 }
+if (ball.x + ball.r > this.bounds.w)       { ball.x = this.bounds.w - ball.r;        ball.vx = -Math.abs(ball.vx) * 0.6 }
+if (ball.y - ball.r < 0)                   { ball.y = ball.r;                         ball.vy =  Math.abs(ball.vy) * 0.6 }
+if (ball.y + ball.r > this.bounds.h)       { ball.y = this.bounds.h - ball.r;        ball.vy = -Math.abs(ball.vy) * 0.6 }
+
+
+for (const w of this.walls) {
+  const hit = resolveCircleVsAabb(ball.x, ball.y, ball.r, w.x, w.y, w.width, w.height)
+  if (!hit) continue
+
+  // push out of the wall
+  ball.x += hit.mtvx
+  ball.y += hit.mtvy
+
+  // derive collision normal from MTV
+  const len = Math.hypot(hit.mtvx || 0, hit.mtvy || 0) || 1
+  const nx = (hit.mtvx || 0) / len
+  const ny = (hit.mtvy || 0) / len
+
+  // reflect velocity across the normal (only if moving into the wall)
+  const vdotn = (ball.vx || 0) * nx + (ball.vy || 0) * ny
+  if (vdotn < 0) {
+    ball.vx -= 2 * vdotn * nx
+    ball.vy -= 2 * vdotn * ny
+  }
+
+  // slight loss so it doesn't ping-pong forever
+  ball.vx *= 0.6
+  ball.vy *= 0.6
+}
+
+
+    // bullet vs ball: knock the ball & remove bullet
+    for (const b of this.bullets) {
+      const dx = ball.x - b.x, dy = ball.y - b.y
+      const minD = (ball.r) + (b.r)
+      if (dx*dx + dy*dy <= minD*minD) {
+        // impulse = bullet momentum proxy
+        const spd = Math.hypot(b.vx || 0, b.vy || 0) || 1
+        const ux = (b.vx || 0) / spd, uy = (b.vy || 0) / spd
+        const impulse = (b.size ?? b.r ?? 3) * 40 / (ball.mass || 1)
+        ball.vx += ux * impulse
+        ball.vy += uy * impulse
+        b.health = 0
+      }
+    }
+
+    // player vs ball: push using circle-circle MTV + transfer velocity
+    for (const p of this.players) {
+      const st = this.state.get(p.id)
+      if (!st?.alive) continue
+      const r = getBoundingRadius(st)
+      const dx = ball.x - st.x, dy = ball.y - st.y
+      const minD = r + ball.r
+      const d2 = dx*dx + dy*dy
+      if (d2 <= minD*minD) {
+        const d = Math.sqrt(d2) || 1
+        const nx = dx / d, ny = dy / d
+        const pen = (r + ball.r) - d
+        // move ball out
+        ball.x += nx * pen
+        ball.y += ny * pen
+        // add knock
+        const push = 120 / (ball.mass || 1)
+        ball.vx += nx * push
+        ball.vy += ny * push
+      }
+    }
+
+    // goal scoring: if ball center inside goal AABB → point
+    const inAABB = (e) => (ball.x >= e.x && ball.x <= e.x + e.width && ball.y >= e.y && ball.y <= e.y + e.height)
+
+    let scoredBy = null
+    if (goalL && inAABB(goalL)) scoredBy = 0  // into LEFT goal -> point for team 0
+    if (goalR && inAABB(goalR)) scoredBy = 1  // into RIGHT goal -> point for team 1
+
+    if (scoredBy != null) {
+      this.teamScores[scoredBy] = (this.teamScores[scoredBy] || 0) + 1
+      this.broadcast({ type: 'announcement', text: `GOAL! Team ${scoredBy + 1}` })
+      // reset ball to center
+      ball.x = this.bounds.w * 0.5
+      ball.y = this.bounds.h * 0.5
+      ball.vx = 0; ball.vy = 0
+
+      // check win
+      const need = this.gamemode.goalsToWin || 3
+      if (this.teamScores[scoredBy] >= need && !this.finishing) {
+        this.finishing = true
+        this.broadcast({ type: 'announcement', text: `Tank Soccer: Team ${scoredBy + 1} wins ${this.teamScores[0]}-${this.teamScores[1]}!` })
+        this.broadcast({ type: 'exitCountdown', seconds: 5 })
+        setTimeout(() => this.end('victory', { team: scoredBy }), 5000)
+      }
+    }
+  }
+}
+
+
 
       // player vs player (SAT), ghost allies if collideAllies === false
       for (let i = 0; i < this.players.length; i++) {
@@ -620,7 +812,11 @@ _resetForNextRound() {
             this._scheduleRespawn(p.id, this.gamemode.respawnMs)
           } else if (this.gamemode.id === 'TIME') {
             // keep default win condition, but allow short respawn for more chaos
-          } else if (this.gamemode.id === 'LTS') {
+          } else if (this.gamemode.id === 'SOCCER') {
+  // Soccer: players can respawn
+  this._scheduleRespawn(p.id, this.gamemode.respawnMs || 2500)
+}
+          else if (this.gamemode.id === 'LTS') {
             // award bonus points to the team that LOST a player
             const teamOfDead = this.playerTeam.get(p.id) ?? 0
             this._awardTeamStatPoints(teamOfDead, this.gamemode.lossStatPts)
@@ -746,32 +942,80 @@ _resetForNextRound() {
       }
 
       // if you want, you can tack mode ui info here later (time remaining / score)
+
+
+
+
 // attach gamemode HUD payload + my respawn info
 const modePayload = { id: this.gamemode.id, name: this.gamemode.name }
 if (this.gamemode.id === 'BLITZ') {
   modePayload.blitz = {
-    teamKills: this.teamKills ? [...this.teamKills] : [0,0],
+    teamKills: this.teamKills ? [...this.teamKills] : [0, 0],
     timeLeftMs: Math.max(0, (this.modeEndAt || Date.now()) - Date.now())
   }
 } else if (this.gamemode.id === 'LTS') {
   modePayload.lts = {
     roundsToWin: this.gamemode.roundsToWin || 2,
-    teamWins: this.teamWins ? [...this.teamWins] : [0,0],
-    // if we're between rounds (countdown to next), client shows "ROUND ENDED (...)"
+    teamWins: this.teamWins ? [...this.teamWins] : [0, 0],
     interRoundEndAt: (!this.started && Date.now() < this.battleStartAt) ? this.battleStartAt : 0
+  }
+} else if (this.gamemode.id === 'SOCCER') {
+  modePayload.soccer = {
+    goalsToWin: this.gamemode.goalsToWin || 3,
+    teamScores: this.teamScores ? [...this.teamScores] : [0, 0]
   }
 }
 
-// viewer-specific: when *you* will respawn
+
+// viewer-specific respawn ETA
 const youPayload = {}
 const ru = this._respawnUntil?.get(viewer.id)
 if (typeof ru === 'number') youPayload.respawnUntil = ru
+// lightweight entities payload (render-only)
+// during soccer-ball step, after friction:
+// only adjust ball when in soccer AND ball exists
+if (this.gamemode.id === 'SOCCER') {
+  const ball = this.entities.find(e => e.type === 'SoccerBall')
+  if (ball) {
+    const fr = ball.friction || 0.985
+    ball.vx = (ball.vx || 0) * fr
+    ball.vy = (ball.vy || 0) * fr
+    const speed = Math.hypot(ball.vx || 0, ball.vy || 0)
+    ball.spin = (ball.spin || 0) + (speed / Math.max(1, ball.r)) * dt
+  }
+}
+
+
+
+// lightweight entities payload (render-only)
+const entsOut = this.entities.map(e => {
+  if (e.kind === 'circle') {
+    return {
+      id: e.id, type: e.type, kind: 'circle',
+      x: e.x, y: e.y, r: e.r,
+      color: e.color, outline: e.outline,
+      pathLocal: e.pathLocal || null,
+      vx: e.vx || 0, vy: e.vy || 0, spin: e.spin || 0
+    }
+  }
+  if (e.kind === 'aabb') {
+    return {
+      id: e.id, type: e.type, kind: 'aabb',
+      x: e.x, y: e.y, width: e.width, height: e.height,
+      color: e.color, team: e.team
+    }
+  }
+  return { id: e.id, type: e.type, kind: e.kind }
+})
+
+
 
 safeSend(viewer.ws, {
   type: 'state',
   ts: nowTs,
   players: playersOut,
   bullets: bulletsOut,
+  entities: entsOut,
   mode: modePayload,
   you: youPayload
 })
@@ -786,7 +1030,8 @@ safeSend(viewer.ws, {
     clearInterval(this.loop)
     try {
       this.players.forEach((p) => {
-        safeSend(p.ws, { type: 'matchEnd', reason, ...details })
+        safeSend(p.ws, { type: 'matchEnd', reason, details })
+
         const h = p._gHandlers
         if (h) {
           try { p.ws.off?.('message', h.onMessage) } catch {}
