@@ -490,8 +490,19 @@ if (snapshots.length === 1) {
       const maxHealth = p1.maxHealth ?? p0.maxHealth ?? 1
       const alive = p1.alive ?? p0.alive ?? true
       const shape = p1.shape ?? p0.shape ?? (tanks.get(id)?.shape || 0)
-      const rot = lerpAngle(p0.rot ?? 0, p1.rot ?? 0, t)
-      out.push({ id, x, y, size, health, maxHealth, alive, shape, rot })
+let rot
+if (id === myId) {
+  // use local mouse angle for MY tank
+  const wx = camera.x - (viewW / 2) / zoom + mouseCssX / zoom
+  const wy = camera.y - (viewH / 2) / zoom + mouseCssY / zoom
+  rot = Math.atan2(wy - p0.y, wx - p0.x)
+} else {
+  // everyone else stays server-interpolated
+  rot = lerpAngle(p0.rot ?? 0, p1.rot ?? 0, t)
+}
+
+out.push({ id, x, y, size, health, maxHealth, alive, shape, rot })
+
     })
     return out
   }

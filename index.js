@@ -197,7 +197,7 @@ const mapGrid = await loadAsciiMap('default_1')
 const poolByQueue = {
   '1v1': ['BLITZ', 'TIME'],
   '2v2': ['BLITZ', 'TIME'],
-  '3v3': ['SOCCER'] // 👈 add Tank Soccer for 3v3
+  '3v3': [/*'SOCCER',*/'LTS',/*'BLITZ','TIME'*/] // 👈 add Tank Soccer for 3v3
 }
 const gmPool = poolByQueue[mode] || ['BLITZ']
 const gamemode = gmPool[Math.floor(Math.random() * gmPool.length)]
